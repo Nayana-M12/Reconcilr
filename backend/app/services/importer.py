@@ -152,6 +152,8 @@ def _find_existing_record(db: Session, record_type: str, row: ImportRow) -> Invo
         existing = db.get(model, row.id)
         if existing:
             return existing
+        if record_type == "invoice":
+            return None
     if record_type == "invoice":
         vendor = _resolve_vendor(db, row)
         assert row.invoice_number and row.invoice_date

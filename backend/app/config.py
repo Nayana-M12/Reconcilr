@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     matching_amount_tolerance_percentage: Decimal = Decimal("0.01")
     matching_date_tolerance_days: int = 7
     matching_fuzzy_minimum_score: int = 85
+    exception_date_gap_days: int = 30
+    exception_medium_amount_threshold: Decimal = Decimal("10.00")
+    exception_high_amount_threshold: Decimal = Decimal("100.00")
+    exception_critical_amount_threshold: Decimal = Decimal("1000.00")
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 

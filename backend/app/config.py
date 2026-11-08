@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     exception_medium_amount_threshold: Decimal = Decimal("10.00")
     exception_high_amount_threshold: Decimal = Decimal("100.00")
     exception_critical_amount_threshold: Decimal = Decimal("1000.00")
+    approval_small_amount_threshold: Decimal = Decimal("100.00")
+    approval_medium_amount_threshold: Decimal = Decimal("1000.00")
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 

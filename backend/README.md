@@ -1,22 +1,25 @@
-# Reconcilr backend (Phase 1)
+# Reconcilr backend
 
-Phase 1 provides the persistence and ingestion foundation for financial reconciliation:
+Reconcilr is a financial reconciliation backend. It imports vendor, purchase order,
+invoice, and payment data, matches related records, detects and classifies
+exceptions, and proposes adjustments that can be reviewed and approved.
 
-- SQLAlchemy 2.x models for vendors, invoices, purchase orders, payments, matches, exceptions, evidence, adjustments, approvals, and append-only audit logs.
-- Alembic migration `0001_initial`.
-- Deterministic synthetic CSV fixtures with reproducible injected errors and `ground_truth.json`.
-- CSV/Excel imports through `POST /imports/{record_type}` (`vendor`, `purchase_order`, `invoice`, or `payment`). Invalid rows are reported individually.
-- Re-imported rows are skipped and reported as duplicates with the existing record ID; the response includes a `duplicates` count.
-- Decimal money handling and invoice dedupe hashes based on normalized vendor, invoice number, amount, and invoice date.
+## Tech stack
 
-Import vendors first so source records can reference existing `vendor_id` values:
+- Python 3.11
+- FastAPI and Uvicorn
+- SQLAlchemy 2.x and Alembic
+- SQLite by default
+- Pydantic Settings
+- Pandas and OpenPyXL for CSV/Excel imports
+- RapidFuzz for fuzzy matching
+- Pytest for tests
 
-1. `POST /imports/vendor`
-2. `POST /imports/purchase_order`
-3. `POST /imports/invoice`
-4. `POST /imports/payment`
+The default database file is `backend/reconcilr.db`.
 
-## Setup
+## Windows setup
+
+From the repository root:
 
 ```powershell
 cd backend
@@ -26,14 +29,49 @@ pip install -r requirements.txt
 alembic upgrade head
 ```
 
-Set `DATABASE_URL` to use another SQLAlchemy-supported database. SQLite is the default.
+Set `DATABASE_URL` to use another SQLAlchemy-supported database. SQLite is the
+default.
 
-## Run
+## Import order
+
+Import vendors first so source records can reference existing `vendor_id` values.
+The required order is:
+
+1. `vendor`
+2. `purchase_order`
+3. `invoice`
+4. `payment`
+
+Use `POST /imports/{record_type}` for each import. CSV and Excel files are
+supported; invalid rows are reported individually and re-imported rows are
+reported as duplicates.
+
+## Run the server and tests
+
+Start the development server from `backend`:
 
 ```powershell
 uvicorn app.main:app --reload
-python -m app.synthetic.generator --seed 42 --output-dir synthetic_data
+```
+
+Run the test suite from `backend`:
+
+```powershell
 pytest
 ```
 
-Phase 2 should add deterministic matching tiers, exception detectors/classification, evidence and adjustment services, approval routing, and their audit coverage.
+## Demo flow
+
+After importing the source data, run the reconciliation workflow in this order:
+
+1. `POST /matching/run` — create matches.
+2. `POST /exceptions/run` — detect and classify exceptions.
+3. `POST /adjustments/propose` — propose adjustments for applicable exceptions.
+4. `GET /adjustments` — review proposed adjustments.
+5. `POST /adjustments/{id}/decision` — approve or reject an adjustment.
+
+## Verified results
+
+- 35 matches
+- 7 exceptions
+- 17 tests passing

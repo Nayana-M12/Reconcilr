@@ -1,0 +1,82 @@
+{
+  "matching": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "expected_count": 35,
+    "actual_count": 35,
+    "false_positives": [],
+    "false_negatives": []
+  },
+  "duplicates": {
+    "detection_rate": 1.0,
+    "false_positives": 0.0
+  },
+  "exceptions": {
+    "by_type": {
+      "DATE_GAP": {
+        "expected": 1,
+        "detected": 1,
+        "precision": 1.0,
+        "recall": 1.0
+      },
+      "DUPLICATE_INVOICE": {
+        "expected": 1,
+        "detected": 1,
+        "precision": 1.0,
+        "recall": 1.0
+      },
+      "MISSING_PAYMENT": {
+        "expected": 1,
+        "detected": 1,
+        "precision": 1.0,
+        "recall": 1.0
+      },
+      "MISSING_PO": {
+        "expected": 1,
+        "detected": 1,
+        "precision": 1.0,
+        "recall": 1.0
+      },
+      "OVERPAYMENT": {
+        "expected": 1,
+        "detected": 1,
+        "precision": 1.0,
+        "recall": 1.0
+      },
+      "PARTIAL_PAYMENT": {
+        "expected": 1,
+        "detected": 1,
+        "precision": 1.0,
+        "recall": 1.0
+      },
+      "VENDOR_MISMATCH": {
+        "expected": 1,
+        "detected": 1,
+        "precision": 1.0,
+        "recall": 1.0
+      }
+    }
+  },
+  "similarity": {
+    "vendor_aliases": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "expected_count": 1,
+      "actual_count": 1,
+      "false_positives": [],
+      "false_negatives": []
+    },
+    "near_duplicates": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "expected_count": 1,
+      "actual_count": 1,
+      "false_positives": [],
+      "false_negatives": []
+    }
+  },
+  "hallucination_rate": 0.0,
+  "unresolved_correctness": 1.0,
+  "extraction_accuracy": null,
+  "extraction_status": "not implemented"
+}

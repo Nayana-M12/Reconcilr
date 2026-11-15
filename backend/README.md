@@ -70,6 +70,58 @@ After importing the source data, run the reconciliation workflow in this order:
 4. `GET /adjustments` — review proposed adjustments.
 5. `POST /adjustments/{id}/decision` — approve or reject an adjustment.
 
+## AI agent and evaluation
+
+The grounded investigation agent is optional and works offline. It uses only the
+read-only tools in `app/agent/tools.py`; the LLM may write explanations but
+cannot create records or supply amounts. Set `LLM_API_KEY` and `LLM_MODEL` to
+enable an OpenAI-compatible chat-completions client. Without those variables,
+investigations use a deterministic, verified template.
+
+Apply the agent persistence migration before using the endpoints:
+
+```powershell
+alembic upgrade head
+```
+
+Agent endpoints:
+
+- `POST /agent/investigate` with `{"exception_id": "..."}`, or an empty body to investigate all open exceptions.
+- `GET /agent/runs`
+- `POST /agent/runs/{id}/accept`
+- `POST /agent/runs/{id}/override`
+
+Every tool call, verification failure, investigation, acceptance, and override
+is written to the audit log. Accepting a `propose_adjustment` recommendation
+uses the existing adjustment proposal and approval-step services.
+
+### AI similarity suggestions
+
+Similarity is suggestion-only. Offline comparisons use normalized RapidFuzz
+scores; optional model-backed comparisons use `LLM_API_KEY` with `LLM_MODEL` (or
+`EMBEDDING_MODEL`). Suggestions never create records, alter matching, or decide
+financial outcomes.
+
+- `POST /ai/vendor-suggestions` finds likely aliases among existing vendors.
+- `POST /ai/duplicate-suggestions` finds reformatted invoice resubmissions.
+- `POST /ai/suggestions/{id}/accept` and `/reject` record a human decision.
+
+Accepted vendor aliases are stored for candidate retrieval only. Accepting a
+near-duplicate creates a duplicate exception through the existing evidence and
+adjustment/approval flow. All suggestions and decisions are audited, and
+missing record IDs are rejected.
+
+Run the labeled synthetic-data evaluation with:
+
+```powershell
+python evals/run_eval.py --json-out evals/report.json --markdown-out evals/report.md
+```
+
+The report includes matching precision/recall, duplicate detection rate and
+false positives, exception metrics, AI similarity precision/recall,
+grounded-explanation hallucination rate, unresolved correctness, and extraction
+accuracy when an extraction module is present.
+
 ## Verified results
 
 - 35 matches

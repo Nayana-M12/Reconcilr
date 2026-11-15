@@ -20,12 +20,17 @@ def generate(output_dir: str | Path, seed: int = 0, vendor_count: int = 5, invoi
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
     vendors = [{"id": _id("ven", index), "name": fake.company(), "normalized_name": ""} for index in range(vendor_count)]
+    if vendor_count >= 2:
+        vendors[0]["name"] = "Acme Corp"
+        vendors[1]["name"] = "ACME Corporation Pvt Ltd"
     for vendor in vendors:
         vendor["normalized_name"] = "".join(c for c in vendor["name"].lower() if c.isalnum())
     purchase_orders: list[dict] = []
     invoices: list[dict] = []
     payments: list[dict] = []
     ground_truth: list[dict] = []
+    vendor_aliases: list[dict] = []
+    near_duplicates: list[dict] = []
     base_date = date(2026, 1, 1)
     for index in range(invoice_count):
         vendor = vendors[index % vendor_count]
@@ -63,6 +68,25 @@ def generate(output_dir: str | Path, seed: int = 0, vendor_count: int = 5, invoi
     duplicate["id"] = _id("inv", invoice_count)
     invoices.append(duplicate)
     inject(0, "DUPLICATE_INVOICE", invoice_id=invoices[0]["id"], duplicate_invoice_id=duplicate["id"])
+    if invoice_count > 7:
+        source = invoices[7]
+        near_duplicate = dict(source)
+        near_duplicate["id"] = _id("inv", invoice_count + 1)
+        near_duplicate["invoice_number"] = source["invoice_number"].replace("-", "/")
+        near_duplicate["invoice_date"] = (
+            date.fromisoformat(source["invoice_date"]) + timedelta(days=1)
+        ).isoformat()
+        near_duplicate["due_date"] = (
+            date.fromisoformat(source["due_date"]) + timedelta(days=1)
+        ).isoformat()
+        near_duplicate["po_number"] = ""
+        invoices.append(near_duplicate)
+        near_duplicates.append({
+            "record_ids": {
+                "invoice_id": source["id"],
+                "near_duplicate_invoice_id": near_duplicate["id"],
+            }
+        })
     short_index = 1
     payments[short_index]["amount"] = str(Decimal(payments[short_index]["amount"]) - Decimal("10.00"))
     inject(short_index, "PARTIAL_PAYMENT", invoice_id=invoices[short_index]["id"], payment_id=payments[short_index]["id"])
@@ -82,13 +106,23 @@ def generate(output_dir: str | Path, seed: int = 0, vendor_count: int = 5, invoi
     date_gap_payment = next(payment for payment in payments if payment["id"] == f"pay-{date_gap:06d}")
     date_gap_payment["payment_date"] = (base_date + timedelta(days=90)).isoformat()
     inject(date_gap, "DATE_GAP", invoice_id=invoices[date_gap]["id"], payment_id=date_gap_payment["id"])
+    if vendor_count >= 2:
+        vendor_aliases.append({
+            "record_ids": {"vendor_id": vendors[0]["id"], "alias_vendor_id": vendors[1]["id"]}
+        })
     _write_csv(output / "vendors.csv", vendors)
     _write_csv(output / "purchase_orders.csv", purchase_orders)
     _write_csv(output / "invoices.csv", invoices)
     _write_csv(output / "payments.csv", payments)
     ground_truth_path = output / "ground_truth.json"
-    ground_truth_path.write_text(json.dumps({"seed": seed, "errors": ground_truth}, indent=2), encoding="utf-8")
-    return {"output_dir": str(output), "ground_truth": ground_truth}
+    labels = {
+        "seed": seed,
+        "errors": ground_truth,
+        "vendor_aliases": vendor_aliases,
+        "near_duplicates": near_duplicates,
+    }
+    ground_truth_path.write_text(json.dumps(labels, indent=2), encoding="utf-8")
+    return {"output_dir": str(output), "ground_truth": labels}
 
 
 def _write_csv(path: Path, rows: list[dict]) -> None:

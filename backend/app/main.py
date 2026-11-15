@@ -2,6 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.adjustments import router as adjustments_router
+from app.api.agent import router as agent_router
+from app.api.ai import router as ai_router
 from app.api.audit import router as audit_router
 from app.api.exceptions import router as exceptions_router
 from app.api.imports import router as imports_router
@@ -21,6 +23,8 @@ app.include_router(imports_router)
 app.include_router(matching_router)
 app.include_router(exceptions_router)
 app.include_router(adjustments_router)
+app.include_router(ai_router)
+app.include_router(agent_router)
 app.include_router(audit_router)
 app.include_router(summary_router)
 

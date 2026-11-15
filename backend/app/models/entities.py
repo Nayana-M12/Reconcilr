@@ -128,3 +128,42 @@ class AuditLog(Base):
     inputs: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     formula: Mapped[str] = mapped_column(Text, nullable=False)
     output: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
+class AgentRun(Base):
+    __tablename__ = "agent_runs"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    exception_id: Mapped[str] = mapped_column(ForeignKey("exception_cases.id"), nullable=False)
+    verdict: Mapped[str] = mapped_column(String(20), nullable=False)
+    explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    claims: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    tool_calls: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    source: Mapped[str] = mapped_column(String(20), nullable=False)
+    verification_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    errors: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+
+class VendorAlias(Base):
+    __tablename__ = "vendor_aliases"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    vendor_id: Mapped[str] = mapped_column(ForeignKey("vendors.id"), nullable=False, index=True)
+    alias_vendor_id: Mapped[str] = mapped_column(ForeignKey("vendors.id"), nullable=False, index=True)
+    score: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str] = mapped_column(String(20), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+
+class AISuggestion(Base):
+    __tablename__ = "ai_suggestions"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    kind: Mapped[str] = mapped_column(String(30), nullable=False)
+    record_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    score: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str] = mapped_column(String(20), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)

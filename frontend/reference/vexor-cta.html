@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vexor – Get your account</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+<style>
+:root{--coral:linear-gradient(135deg,#FF8A73,#F0605A);--mute:#808081}
+*{box-sizing:border-box}
+html,body{margin:0;background:#000;color:#fff;font-family:"Inter Vexor",Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.page{container-type:inline-size;min-height:100dvh}
+.in{--u:calc(100cqw/1440);--v:min(calc(100cqw/1240),calc(100dvh/720));padding:calc(30*var(--u))}
+
+/* card */
+.card{position:relative;overflow:hidden;border-radius:calc(20*var(--u));height:calc(340*var(--u));max-height:calc(100dvh - 160px);min-height:300px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  background:radial-gradient(55% 95% at 90% 90%,rgba(240,96,90,.8),transparent 70%),radial-gradient(40% 70% at 68% 105%,rgba(255,138,115,.55),transparent 70%),#000}
+.still,.vid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:right bottom}
+.vid{opacity:0;transition:opacity 1s ease}
+.vid.on{opacity:.8}
+.card::after{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;
+  background:linear-gradient(135deg,rgba(244,118,104,.67),rgba(244,118,104,.29));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;
+  animation:rule 1.1s ease-out both}
+.body{position:relative;z-index:1;padding:0 20px;width:100%}
+h1{margin:0;font-size:max(26px,calc(34*var(--u)));font-weight:600;letter-spacing:-.02em;animation:rise .7s .15s ease-out both}
+.sub{margin:calc(14*var(--u)) 0 calc(28*var(--u));font-size:max(15px,calc(16*var(--u)));line-height:1.5;color:rgba(255,255,255,.85);animation:fade .7s .45s ease-out both}
+
+/* waitlist form */
+form{position:relative;margin:0 auto;width:min(100%,max(380px,calc(460*var(--u))));height:max(52px,calc(56*var(--u)));
+  animation:grow .6s .7s cubic-bezier(.2,.8,.2,1) both}
+input{width:100%;height:100%;padding:0 150px 0 22px;border-radius:999px;border:1px solid rgba(255,255,255,.15);background:#000;color:#fff;font:inherit;font-size:14px;transition:border-color .2s}
+input::placeholder{color:var(--mute)}
+input:hover,input:focus{border-color:rgba(255,255,255,.4);outline:none}
+button{position:absolute;top:5px;right:5px;bottom:5px;padding:0 20px;border:0;border-radius:999px;color:#fff;font:600 14px/1 inherit;font-family:inherit;cursor:pointer;
+  background:var(--coral);box-shadow:inset 0 1px 0 rgba(255,255,255,.4);transition:transform .2s,box-shadow .2s;animation:pop .5s 1.05s cubic-bezier(.3,1.5,.5,1) both}
+button:hover{transform:translateY(-1px);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 6px 22px rgba(240,96,90,.55)}
+button:focus-visible,a:focus-visible{outline:2px solid #FF8A73;outline-offset:3px}
+.msg{min-height:20px;margin-top:12px;font-size:13px;color:#FF8A73}
+
+/* footer */
+footer{display:grid;grid-template-columns:1fr auto;gap:40px;margin-top:calc(56*var(--u))}
+.left{animation:fade .6s 1.3s ease-out both}
+.mark{margin-bottom:18px}
+footer p{margin:0;max-width:44ch;font-size:14px;line-height:1.6;color:var(--mute)}
+.right{font-size:14px;line-height:1.7;color:#fff}
+.right b{display:block;font-weight:600;margin-bottom:6px}
+.right address{font-style:normal;margin-top:10px;color:var(--mute)}
+a{color:#fff;text-decoration:none}
+a:hover{text-decoration:underline}
+.base{grid-column:1/-1;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-top:20px;border-top:1px solid rgba(255,255,255,.2);font-size:13px;color:var(--mute)}
+
+@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes grow{from{opacity:0;transform:scaleX(.3)}to{opacity:1;transform:none}}
+@keyframes pop{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:none}}
+@keyframes rule{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+
+@media(max-width:1024px){.in{--u:calc(100cqw/768)}}
+@media(max-width:600px){
+  .in{--u:calc(100cqw/390);padding:16px}
+  .card{height:auto;max-height:none;padding:48px 0}
+  .sub br{display:none}
+  footer{grid-template-columns:1fr;gap:28px}
+}
+@media(prefers-reduced-motion:reduce){
+  .vid{display:none}
+  *,.card::after{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+<div class="page"><div class="in">
+  <section class="card">
+    <img class="still" alt="" aria-hidden="true" src="https://d2ol7oe51mr4n9.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/03c58212-3a59-4c80-b19d-30d05a174563.webp" onerror="this.style.display='none'">
+    <video class="vid" id="vid" muted loop autoplay playsinline aria-hidden="true" src="https://d2ol7oe51mr4n9.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/f6f4ec49-d5dd-4893-8eb4-fa0f932aceaf.mp4"></video>
+    <div class="body">
+      <h1>Get your Vexor Account</h1>
+      <p class="sub">Join 200+ businesses like yours, powering their global<br>transactions with Vexor.</p>
+      <form id="f" novalidate>
+        <input type="email" id="email" placeholder="Enter your email to join the waitlist" aria-label="Email address" autocomplete="email" required>
+        <button type="submit">Get Free Access</button>
+      </form>
+      <div class="msg" id="msg" role="status"></div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="left">
+      <svg class="mark" width="40" height="28" viewBox="0 0 40 28" fill="none" stroke="#F0605A" stroke-width="3" stroke-linecap="round" aria-label="Vexor"><path d="M5 3l6 22M20 3l0 22M35 3l-6 22"/></svg>
+      <p>Get paid for free from countries in the EU, Asia, and the US. There are no deposit charges. Create an account in your preferred currency and share the details to get paid. We make it easy to go international.</p>
+    </div>
+    <div class="right">
+      <b>Contact Us</b>
+      <a href="tel:+442079460321">+44 20 7946 0321</a>
+      <address>Vexor Labs Ltd,<br>12 Harbour Row,<br>Bristol BS1 5TT, UK</address>
+    </div>
+    <div class="base">
+      <span>Copyright © Vexor Labs. 2025. All Rights Reserved.</span>
+      <span>Email us: <a href="mailto:hello@vexor.example">hello@vexor.example</a></span>
+    </div>
+  </footer>
+</div></div>
+<script>
+const v=document.getElementById('vid');
+v.addEventListener('loadeddata',()=>v.classList.add('on'));
+document.getElementById('f').addEventListener('submit',e=>{
+  e.preventDefault();
+  const m=document.getElementById('msg'),i=document.getElementById('email');
+  m.textContent=/^\S+@\S+\.\S+$/.test(i.value)?"You're on the waitlist.":"Enter a valid email address.";
+  if(/^\S+@\S+\.\S+$/.test(i.value))i.value='';
+});
+</script>
+</body>
+</html>

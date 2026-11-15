@@ -1,5 +1,7 @@
 from app.models.entities import (
     Adjustment,
+    AgentRun,
+    AISuggestion,
     ApprovalStep,
     AuditLog,
     Evidence,
@@ -9,10 +11,13 @@ from app.models.entities import (
     Payment,
     PurchaseOrder,
     Vendor,
+    VendorAlias,
 )
 
 __all__ = [
+    "AISuggestion",
     "Adjustment",
+    "AgentRun",
     "ApprovalStep",
     "AuditLog",
     "Evidence",
@@ -22,4 +27,5 @@ __all__ = [
     "Payment",
     "PurchaseOrder",
     "Vendor",
+    "VendorAlias",
 ]

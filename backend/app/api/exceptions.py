@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.auth import AuthenticatedUser, require_roles
 from app.database import get_db
 from app.services.exceptions.engine import (
     get_exception,
@@ -12,7 +13,10 @@ router = APIRouter(prefix="/exceptions", tags=["exceptions"])
 
 
 @router.post("/run")
-def run(db: Session = Depends(get_db)) -> dict[str, object]:  # noqa: B008
+def run(
+    db: Session = Depends(get_db),  # noqa: B008
+    user: AuthenticatedUser = Depends(require_roles("analyst", "admin")),  # noqa: B008
+) -> dict[str, object]:
     result = run_exceptions(db)
     return {"created": result.created, "existing": result.existing, "by_type": result.by_type}
 

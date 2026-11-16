@@ -32,6 +32,31 @@ alembic upgrade head
 Set `DATABASE_URL` to use another SQLAlchemy-supported database. SQLite is the
 default.
 
+Authentication requires `JWT_SECRET`; copy `.env.example` to `.env` and set a
+long random value before starting the API. Seed demo users only from password
+environment variables:
+
+```powershell
+alembic upgrade head
+python scripts\seed_users.py
+```
+
+`POST /login` returns a short-lived bearer token. All other API endpoints
+require that token. Roles are `admin`, `analyst`, `approver`, and `auditor`;
+approval roles are taken from the token, never from request JSON. Admins manage
+users through `GET/POST /users`.
+
+When `APP_ENV=development`, open `/docs`, click **Authorize**, enter a seeded
+demo user's username and password in the OAuth2 form, and click **Authorize**.
+You can then try protected endpoints directly from the interactive
+documentation. The default `APP_ENV=production` keeps the documentation
+protected behind the same bearer-token requirement.
+
+Set `CORS_ORIGINS` to a comma-separated list of trusted frontend origins. In
+development, the default allows both `http://localhost:5173` and
+`http://127.0.0.1:5173`. Credentials are enabled, so `*` is not a valid
+origin value.
+
 ## Import order
 
 Import vendors first so source records can reference existing `vendor_id` values.
@@ -43,8 +68,15 @@ The required order is:
 4. `payment`
 
 Use `POST /imports/{record_type}` for each import. CSV and Excel files are
-supported; invalid rows are reported individually and re-imported rows are
-reported as duplicates.
+supported up to the configured 10 MB limit; invalid rows are reported
+individually and re-imported rows are reported as duplicates. Other extensions
+are rejected. XLSX formulas are read as literal text and are never evaluated.
+Uploads are processed from memory and are not retained as temporary files.
+
+Audit logs are append-only through the API. `GET /audit` is the only audit
+route; every write records the authenticated username and role. Set
+`LLM_REDACT=1` to mask vendor and bank-like fields with stable placeholders in
+audit data and before any LLM call.
 
 ## Run the server and tests
 

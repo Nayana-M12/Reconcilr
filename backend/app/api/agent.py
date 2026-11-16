@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.agent.investigate import investigate_exception
 from app.agent.verifier import InvestigationResult
+from app.auth import AuthenticatedUser, require_roles
 from app.database import get_db
 from app.models import AgentRun, ExceptionCase
 from app.services.adjustments import propose_adjustments
@@ -34,7 +35,11 @@ def _serialize(run: AgentRun) -> dict[str, Any]:
 
 
 @router.post("/investigate")
-def investigate(request: InvestigateRequest, db: Session = Depends(get_db)) -> list[dict[str, Any]]:  # noqa: B008
+def investigate(
+    request: InvestigateRequest,
+    db: Session = Depends(get_db),  # noqa: B008
+    user: AuthenticatedUser = Depends(require_roles("analyst", "admin")),  # noqa: B008
+) -> list[dict[str, Any]]:
     if request.exception_id:
         exception = db.get(ExceptionCase, request.exception_id)
         if exception is None:
@@ -52,7 +57,12 @@ def list_runs(db: Session = Depends(get_db)) -> list[dict[str, Any]]:  # noqa: B
 
 
 @router.post("/runs/{run_id}/accept")
-def accept_run(run_id: str, request: DecisionRequest, db: Session = Depends(get_db)) -> dict[str, Any]:  # noqa: B008
+def accept_run(
+    run_id: str,
+    request: DecisionRequest,
+    db: Session = Depends(get_db),  # noqa: B008
+    user: AuthenticatedUser = Depends(require_roles("approver", "admin")),  # noqa: B008
+) -> dict[str, Any]:
     run = db.get(AgentRun, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Agent run not found")
@@ -72,7 +82,12 @@ def accept_run(run_id: str, request: DecisionRequest, db: Session = Depends(get_
 
 
 @router.post("/runs/{run_id}/override")
-def override_run(run_id: str, request: DecisionRequest, db: Session = Depends(get_db)) -> dict[str, Any]:  # noqa: B008
+def override_run(
+    run_id: str,
+    request: DecisionRequest,
+    db: Session = Depends(get_db),  # noqa: B008
+    user: AuthenticatedUser = Depends(require_roles("approver", "admin")),  # noqa: B008
+) -> dict[str, Any]:
     run = db.get(AgentRun, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail="Agent run not found")

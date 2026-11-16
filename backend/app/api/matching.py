@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.auth import AuthenticatedUser, require_roles
 from app.database import get_db
 from app.services.matching.engine import list_matches, run_matching
 
@@ -8,7 +9,10 @@ router = APIRouter(prefix="/matching", tags=["matching"])
 
 
 @router.post("/run")
-def run(db: Session = Depends(get_db)) -> dict[str, object]:  # noqa: B008
+def run(
+    db: Session = Depends(get_db),  # noqa: B008
+    user: AuthenticatedUser = Depends(require_roles("analyst", "admin")),  # noqa: B008
+) -> dict[str, object]:
     result = run_matching(db)
     return {
         "created": result.created,

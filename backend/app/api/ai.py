@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ai.suggestions import suggest_near_duplicates, suggest_vendor_aliases
+from app.auth import AuthenticatedUser, require_roles
 from app.database import get_db
 from app.models import (
     AISuggestion,
@@ -71,12 +72,18 @@ def _persist_suggestions(db: Session, suggestions: list[dict[str, Any]]) -> list
 
 
 @router.post("/vendor-suggestions")
-def vendor_suggestions(db: Session = Depends(get_db)) -> list[dict[str, Any]]:  # noqa: B008
+def vendor_suggestions(
+    db: Session = Depends(get_db),  # noqa: B008
+    user: AuthenticatedUser = Depends(require_roles("analyst", "admin")),  # noqa: B008
+) -> list[dict[str, Any]]:
     return _persist_suggestions(db, suggest_vendor_aliases(db))
 
 
 @router.post("/duplicate-suggestions")
-def duplicate_suggestions(db: Session = Depends(get_db)) -> list[dict[str, Any]]:  # noqa: B008
+def duplicate_suggestions(
+    db: Session = Depends(get_db),  # noqa: B008
+    user: AuthenticatedUser = Depends(require_roles("analyst", "admin")),  # noqa: B008
+) -> list[dict[str, Any]]:
     return _persist_suggestions(db, suggest_near_duplicates(db))
 
 
@@ -121,7 +128,10 @@ def _accept_near_duplicate(db: Session, suggestion: AISuggestion) -> str:
 
 @router.post("/suggestions/{suggestion_id}/accept")
 def accept_suggestion(
-    suggestion_id: str, request: DecisionRequest, db: Session = Depends(get_db)  # noqa: B008
+    suggestion_id: str,
+    request: DecisionRequest,
+    db: Session = Depends(get_db),  # noqa: B008
+    user: AuthenticatedUser = Depends(require_roles("approver", "admin")),  # noqa: B008
 ) -> dict[str, Any]:
     suggestion = db.get(AISuggestion, suggestion_id)
     if suggestion is None:
@@ -159,7 +169,10 @@ def accept_suggestion(
 
 @router.post("/suggestions/{suggestion_id}/reject")
 def reject_suggestion(
-    suggestion_id: str, request: DecisionRequest, db: Session = Depends(get_db)  # noqa: B008
+    suggestion_id: str,
+    request: DecisionRequest,
+    db: Session = Depends(get_db),  # noqa: B008
+    user: AuthenticatedUser = Depends(require_roles("approver", "admin")),  # noqa: B008
 ) -> dict[str, Any]:
     suggestion = db.get(AISuggestion, suggestion_id)
     if suggestion is None:

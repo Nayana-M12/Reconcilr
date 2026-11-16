@@ -9,6 +9,8 @@ from dataclasses import dataclass
 
 from rapidfuzz.fuzz import token_set_ratio
 
+from app.services.privacy import redaction_enabled
+
 _COMPANY_SUFFIXES = {
     "corp", "corporation", "inc", "incorporated", "llc", "ltd", "limited",
     "co", "company", "pvt", "private",
@@ -107,4 +109,6 @@ def compare_text(left: str, right: str, kind: str = "vendor") -> SimilarityResul
         raise ValueError("kind must be vendor or invoice")
     if not left.strip() or not right.strip():
         return SimilarityResult(0.0, "One or both values are empty.", "rapidfuzz")
+    if redaction_enabled():
+        return _rapidfuzz_similarity(left, right, kind)
     return _model_similarity(left, right, kind)

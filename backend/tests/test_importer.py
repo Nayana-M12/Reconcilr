@@ -1,7 +1,10 @@
 from decimal import Decimal
+from io import BytesIO
+
+from openpyxl import Workbook
 
 from app.models import AuditLog, Invoice, Payment, PurchaseOrder, Vendor
-from app.services.importer import compute_dedupe_hash, import_records
+from app.services.importer import _read_file, compute_dedupe_hash, import_records
 
 
 def test_importer_rejects_bad_rows_and_audits_valid_rows(db):
@@ -100,3 +103,16 @@ def test_bad_rows_are_isolated_from_valid_rows(db):
     assert result["duplicates"] == 0
     assert [error["row"] for error in result["errors"]] == [2, 3, 4]
     assert db.query(PurchaseOrder).count() == 2
+
+
+def test_xlsx_formulas_are_imported_as_text():
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.append(["value"])
+    worksheet.append(["=1+1"])
+    content = BytesIO()
+    workbook.save(content)
+
+    frame = _read_file("values.xlsx", content.getvalue())
+
+    assert frame.iloc[0, 0] == "=1+1"

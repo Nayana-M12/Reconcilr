@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.auth import AuthenticatedUser, require_roles
 from app.database import get_db
 from app.services.adjustments import (
     get_adjustment,
@@ -46,7 +47,10 @@ def _serialize(db: Session, adjustment) -> dict[str, object]:
 
 
 @router.post("/propose")
-def propose(db: Session = Depends(get_db)) -> list[dict[str, object]]:  # noqa: B008
+def propose(
+    db: Session = Depends(get_db),  # noqa: B008
+    user: AuthenticatedUser = Depends(require_roles("analyst", "admin")),  # noqa: B008
+) -> list[dict[str, object]]:
     return [_serialize(db, adjustment) for adjustment in propose_adjustments(db)]
 
 
@@ -68,9 +72,13 @@ def decision(
     adjustment_id: str,
     request: DecisionRequest,
     db: Session = Depends(get_db),  # noqa: B008
+    user: AuthenticatedUser = Depends(require_roles("approver", "admin")),  # noqa: B008
 ) -> dict[str, object]:
     try:
-        adjustment = decide(db, adjustment_id, request.role, request.decision, request.comment)
+        steps = approval_steps(db, adjustment_id)
+        pending = next((step for step in steps if step.decision == "pending"), None)
+        decision_role = pending.approver_role if pending is not None else user.role
+        adjustment = decide(db, adjustment_id, decision_role, request.decision, request.comment)
     except ApprovalConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _serialize(db, adjustment)

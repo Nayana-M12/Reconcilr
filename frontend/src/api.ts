@@ -21,20 +21,66 @@ export type ImportResponse = {
   record_type: string; source_file: string; imported: number; rejected: number;
   duplicates: number; errors: Record<string, unknown>[]; ids: string[];
 };
+export type AuthUser = { username: string; role: string };
+type LoginResponse = { access_token: string; token_type: string; role: string };
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+let authToken = sessionStorage.getItem("reconcilr_token");
+
+export const getAuthToken = () => authToken;
+export const setAuthToken = (token: string) => {
+  authToken = token;
+  sessionStorage.setItem("reconcilr_token", token);
+};
+export const clearAuthToken = () => {
+  authToken = null;
+  sessionStorage.removeItem("reconcilr_token");
+};
+const decodeUser = (token: string | null): AuthUser | null => {
+  if (!token) return null;
   try {
-    const headers = init?.body instanceof FormData
-      ? { ...(init?.headers || {}) }
-      : { "Content-Type": "application/json", ...(init?.headers || {}) };
+    const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = payload.padEnd(Math.ceil(payload.length / 4) * 4, "=");
+    const claims = JSON.parse(atob(padded)) as Partial<AuthUser>;
+    return typeof claims.username === "string" && typeof claims.role === "string"
+      ? { username: claims.username, role: claims.role }
+      : null;
+  } catch {
+    return null;
+  }
+};
+export const getAuthUser = () => decodeUser(authToken);
+
+export class ApiError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  options: { redirectOnUnauthorized?: boolean } = {},
+): Promise<T> {
+  try {
+    const headers = new Headers(init?.headers);
+    if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+    if (authToken && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${authToken}`);
     const response = await fetch(`${BASE_URL}${path}`, {
       ...init, headers,
     });
     if (!response.ok) {
       let detail = `Request failed (${response.status})`;
       try { const body = await response.json(); detail = body.detail || detail; } catch { /* non-JSON response */ }
-      throw new Error(`${response.status}: ${detail}`);
+      if (response.status === 401 && options.redirectOnUnauthorized !== false) {
+        clearAuthToken();
+        window.location.assign(`/login?message=${encodeURIComponent("Your session expired. Sign in again.")}`);
+      }
+      if (response.status === 403) throw new ApiError(403, "You do not have permission for this action.");
+      throw new ApiError(response.status, `${response.status}: ${detail}`);
     }
     return response.json() as Promise<T>;
   } catch (error) {
@@ -42,6 +88,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw error;
   }
 }
+export const login = async (username: string, password: string) => {
+  const result = await request<LoginResponse>("/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  }, { redirectOnUnauthorized: false });
+  setAuthToken(result.access_token);
+  return getAuthUser();
+};
 export const getSummary = () => request<Summary>("/summary");
 export const getHealth = () => request<{ status: string }>("/health");
 export const importRecords = (recordType: string, file: File) => {

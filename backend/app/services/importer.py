@@ -37,6 +37,17 @@ def _read_file(filename: str, content: bytes) -> pd.DataFrame:
     if suffix in {".xlsx", ".xls"}:
         from io import BytesIO
 
+        if suffix == ".xlsx":
+            from openpyxl import load_workbook
+
+            workbook = load_workbook(BytesIO(content), read_only=True, data_only=False)
+            worksheet = workbook.active
+            rows = list(worksheet.values)
+            workbook.close()
+            if not rows:
+                return pd.DataFrame()
+            headers = [str(value) if value is not None else "" for value in rows[0]]
+            return pd.DataFrame(rows[1:], columns=headers).fillna("")
         return pd.read_excel(BytesIO(content), dtype=str).fillna("")
     raise ValueError("Only CSV and Excel (.xlsx/.xls) files are supported")
 

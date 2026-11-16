@@ -126,6 +126,104 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .app-sidebar > a span { color: var(--coral); }
 
+.sidebar-account {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 40px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+.sidebar-account div { min-width: 0; }
+.sidebar-account strong,
+.sidebar-account span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar-account strong { font-size: 12px; font-weight: 500; }
+.sidebar-account span {
+  margin-top: 4px;
+  color: var(--coral-start);
+  font-size: 10px;
+  text-transform: capitalize;
+}
+.sidebar-account button {
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0;
+}
+.sidebar-account button:hover { color: #fff; }
+
+.login-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(244, 118, 104, 0.18), transparent 42%),
+    #000;
+}
+.login-card {
+  width: min(100%, 430px);
+  padding: 38px;
+}
+.login-brand {
+  display: inline-block;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  text-decoration: none;
+}
+.login-brand span { color: var(--coral); }
+.login-card .dashboard-kicker { margin-top: 58px; }
+.login-card h1 {
+  margin: 0;
+  font-size: 42px;
+  font-weight: 600;
+  letter-spacing: -0.07em;
+}
+.login-subtitle {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.login-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 30px;
+}
+.login-form label {
+  display: grid;
+  gap: 8px;
+  color: #c5c5c5;
+  font-size: 12px;
+}
+.login-form button { margin-top: 8px; }
+.login-error {
+  margin-top: 22px;
+  border: 1px solid rgba(244, 118, 104, 0.45);
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: #ffb1a2;
+  font-size: 12px;
+}
+.login-back {
+  display: inline-block;
+  margin-top: 24px;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: none;
+}
+.login-back:hover { color: #fff; }
+
 .app-nav a {
   border: 1px solid transparent;
   color: var(--muted);

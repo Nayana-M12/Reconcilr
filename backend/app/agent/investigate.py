@@ -18,6 +18,7 @@ from app.agent.verifier import (
 )
 from app.models import AgentRun
 from app.services.audit import write_audit
+from app.services.privacy import redact, restore
 
 SYSTEM_PROMPT = """You investigate one reconciliation exception using only the supplied tools.
 Never invent records, IDs, amounts, dates, or conclusions. Every claim must cite record_ids and
@@ -158,7 +159,7 @@ def _llm_result(recorder: ToolRecorder, exception_id: str, errors: list[str]) ->
                     arguments = json.loads(function.get("arguments", "{}"))
                     result = recorder.call(name, arguments)
                     messages.append({
-                        "role": "tool", "tool_call_id": requested.get("id", ""), "content": json.dumps(result),
+                        "role": "tool", "tool_call_id": requested.get("id", ""), "content": json.dumps(redact(result)),
                     })
             raise VerificationFailure("LLM exceeded the six-step tool-calling limit")
         except (VerificationFailure, KeyError, TypeError, ValueError) as exc:
@@ -190,6 +191,7 @@ def investigate_exception(db: Session, exception_id: str) -> AgentRun:
         result = verify_and_render(db, result, recorder.calls, source="template")
         source = "template"
 
+    result = InvestigationResult.model_validate(restore(result.model_dump()))
     run = AgentRun(
         exception_id=exception_id, verdict=result.verdict, explanation=as_json(result),
         claims=[claim.model_dump() for claim in result.claims], tool_calls=recorder.calls,

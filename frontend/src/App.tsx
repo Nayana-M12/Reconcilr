@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import { BrowserRouter, Link, NavLink, Outlet, Route, Routes } from "react-router-dom";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { BrowserRouter, Link, Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  Adjustment, AuditEntry, Exception, decideAdjustment, getAdjustment, getAdjustments, getAudit,
+  Adjustment, AuditEntry, AuthUser, Exception, clearAuthToken, decideAdjustment, getAdjustment, getAdjustments, getAudit,
   getException, getExceptions, getMatches, getSummary, proposeAdjustments, runExceptions, runMatching, Summary,
+  getAuthToken, getAuthUser, login,
 } from "./api";
 import LandingCta from "./components/LandingCta";
 import "./styles.css";
@@ -52,15 +53,49 @@ function State({ loading, error, empty = false }: { loading: boolean; error: str
 }
 function Layout() {
   const links = [["/app", "Overview"], ["/app/exceptions", "Exceptions"], ["/app/adjustments", "Adjustments"], ["/app/audit", "Audit log"]];
+  const navigate = useNavigate();
+  const user = getAuthUser();
+  const signOut = () => { clearAuthToken(); navigate("/login"); };
   return <div className="min-h-screen md:flex">
     <aside className="app-sidebar border-b border-white/10 p-5 md:min-h-screen md:w-64 md:border-b-0 md:border-r">
       <Link to="/app" className="text-lg font-semibold tracking-tight">Reconcilr<span className="text-white/40">.</span></Link>
       <nav className="app-nav mt-8 flex gap-2 overflow-auto md:block md:space-y-1">
         {links.map(([to, label], index) => <NavLink key={to} to={to} end={to === "/app"} className={({ isActive }) => `block whitespace-nowrap rounded-lg px-3 py-2 text-sm ${isActive ? "bg-white/10 text-white" : "text-white/50 hover:bg-white/5 hover:text-white"}`}><span className="nav-icon" aria-hidden="true">{navIcons[index]}</span>{label}</NavLink>)}
       </nav>
+      {user && <div className="sidebar-account">
+        <div><strong>{user.username}</strong><span>{user.role}</span></div>
+        <button type="button" onClick={signOut}>Sign out</button>
+      </div>}
     </aside>
     <main className="app-main w-full max-w-7xl p-5 md:p-10"><Outlet /></main>
   </div>;
+}
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  return getAuthToken() ? <>{children}</> : <Navigate to="/login" replace state={{ from: location.pathname }} />;
+}
+function LoginPage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [username, setUsername] = useState(""); const [password, setPassword] = useState("");
+  const [error, setError] = useState(searchParams.get("message") || ""); const [submitting, setSubmitting] = useState(false);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault(); setSubmitting(true); setError("");
+    try { await login(username, password); navigate("/app", { replace: true }); }
+    catch (e) { setError(errorText(e)); } finally { setSubmitting(false); }
+  };
+  return <main className="login-page"><section className="login-card card">
+    <Link to="/" className="login-brand">Reconcilr<span>.</span></Link>
+    <p className="dashboard-kicker">Secure workspace</p><h1>Sign in</h1>
+    <p className="login-subtitle">Access your reconciliation control room.</p>
+    {error && <div className="login-error">{error}</div>}
+    <form onSubmit={submit} className="login-form">
+      <label>Username<input className="field" value={username} onChange={event => setUsername(event.target.value)} autoComplete="username" required /></label>
+      <label>Password<input className="field" type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" required /></label>
+      <button className="button-primary" type="submit" disabled={submitting}>{submitting ? "Signing in..." : "Sign in"}</button>
+    </form>
+    <Link to="/" className="login-back">Back to home</Link>
+  </section></main>;
 }
 function PageTitle({ title, subtitle }: { title: string; subtitle: string }) {
   return <header className="app-page-title mb-8"><h1 className="text-2xl font-semibold">{title}</h1><p className="mt-1 text-sm text-white/45">{subtitle}</p></header>;
@@ -135,12 +170,13 @@ function ExceptionsPage() {
 }
 function AdjustmentsPage() {
   const [items, setItems] = useState<Adjustment[]>([]); const [selected, setSelected] = useState<Adjustment | null>(null);
-  const [error, setError] = useState(""); const [loading, setLoading] = useState(true); const [role, setRole] = useState(""); const [comment, setComment] = useState(""); const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(""); const [loading, setLoading] = useState(true); const [comment, setComment] = useState(""); const [saving, setSaving] = useState(false);
+  const user = getAuthUser(); const canApprove = user?.role === "approver" || user?.role === "admin";
   const load = () => { setLoading(true); getAdjustments().then(setItems).catch(e => setError(errorText(e))).finally(() => setLoading(false)); }; useEffect(load, []);
-  const decide = async (decision: "approved" | "rejected") => { if (!selected || !role) return; setSaving(true); setError(""); try { const updated = await decideAdjustment(selected.id, { role, decision, comment }); setSelected(updated); setItems(items.map(item => item.id === updated.id ? updated : item)); } catch (e) { setError(errorText(e)); } finally { setSaving(false); } };
+  const decide = async (decision: "approved" | "rejected") => { if (!selected || !canApprove || !user) return; setSaving(true); setError(""); try { const updated = await decideAdjustment(selected.id, { role: user.role, decision, comment }); setSelected(updated); setItems(items.map(item => item.id === updated.id ? updated : item)); } catch (e) { setError(errorText(e)); } finally { setSaving(false); } };
   return <><PageTitle title="Adjustments" subtitle="Approve proposed changes with a clear audit trail." /><State loading={loading} error={error} empty={!loading && !error && !items.length} />
-    {!loading && !error && !!items.length && <div className="grid gap-5 lg:grid-cols-[1fr_420px]"><div className="card overflow-hidden"><table className="w-full text-left text-sm"><thead className="border-b border-white/10 text-xs uppercase text-white/40"><tr><th className="p-4">Status</th><th>Proposed amount</th><th>Approvers</th></tr></thead><tbody>{items.map(item => <tr key={item.id} onClick={() => { setSelected(item); setRole(item.required_approvers.find(r => item.approval_steps.find(s => s.role === r)?.decision === "pending") || ""); }} className="cursor-pointer border-b border-white/5 last:border-0 hover:bg-white/5"><td className="p-4"><span className="status-badge" data-status={item.status}>{item.status}</span></td><td>{item.proposed_amount}</td><td>{item.required_approvers.join(", ")}</td></tr>)}</tbody></table></div>
-      {selected && <div className="detail-panel card h-fit p-6"><div className="flex justify-between"><h2 className="font-semibold">Calculation</h2><button className="text-white/50" onClick={() => setSelected(null)}>Close</button></div><div className="mt-4 space-y-2 text-sm"><p className="text-white/50">Formula</p><p>{selected.calculation.formula}</p><p className="pt-2 text-white/50">Result</p><p className="text-xl">{selected.calculation.result}</p><p className="pt-2 text-white/50">Records</p>{selected.calculation.record_ids.map(id => <p key={id}>{id}: {selected.calculation.amounts[id]}</p>)}</div><h3 className="mt-6 text-sm font-medium">Approval steps</h3><div className="mt-3 space-y-2">{selected.approval_steps.map(step => <div className="flex justify-between rounded-lg border border-white/10 p-3 text-sm" key={step.id}><span>{step.role}</span><span className="status-badge" data-status={step.decision}>{step.decision}</span></div>)}</div>{selected.status === "pending" && <><select className="field mt-5 w-full" value={role} onChange={e => setRole(e.target.value)}><option value="">Select role</option>{selected.required_approvers.map(r => <option key={r}>{r}</option>)}</select><input className="field mt-2 w-full" placeholder="Comment (optional)" value={comment} onChange={e => setComment(e.target.value)} /><div className="mt-3 flex gap-2"><button className="button-primary flex-1" disabled={saving || !role} onClick={() => decide("approved")}>Approve</button><button className="button-secondary flex-1" disabled={saving || !role} onClick={() => decide("rejected")}>Reject</button></div></>}</div>}</div>}
+    {!loading && !error && !!items.length && <div className="grid gap-5 lg:grid-cols-[1fr_420px]"><div className="card overflow-hidden"><table className="w-full text-left text-sm"><thead className="border-b border-white/10 text-xs uppercase text-white/40"><tr><th className="p-4">Status</th><th>Proposed amount</th><th>Approvers</th></tr></thead><tbody>{items.map(item => <tr key={item.id} onClick={() => { setSelected(item); setComment(""); }} className="cursor-pointer border-b border-white/5 last:border-0 hover:bg-white/5"><td className="p-4"><span className="status-badge" data-status={item.status}>{item.status}</span></td><td>{item.proposed_amount}</td><td>{item.required_approvers.join(", ")}</td></tr>)}</tbody></table></div>
+      {selected && <div className="detail-panel card h-fit p-6"><div className="flex justify-between"><h2 className="font-semibold">Calculation</h2><button className="text-white/50" onClick={() => setSelected(null)}>Close</button></div><div className="mt-4 space-y-2 text-sm"><p className="text-white/50">Formula</p><p>{selected.calculation.formula}</p><p className="pt-2 text-white/50">Result</p><p className="text-xl">{selected.calculation.result}</p><p className="pt-2 text-white/50">Records</p>{selected.calculation.record_ids.map(id => <p key={id}>{id}: {selected.calculation.amounts[id]}</p>)}</div><h3 className="mt-6 text-sm font-medium">Approval steps</h3><div className="mt-3 space-y-2">{selected.approval_steps.map(step => <div className="flex justify-between rounded-lg border border-white/10 p-3 text-sm" key={step.id}><span>{step.role}</span><span className="status-badge" data-status={step.decision}>{step.decision}</span></div>)}</div>{selected.status === "pending" && <><input className="field mt-5 w-full" placeholder="Comment (optional)" value={comment} onChange={e => setComment(e.target.value)} />{!canApprove && <p className="mt-3 text-sm text-red-200">You do not have permission for this action.</p>}<div className="mt-3 flex gap-2"><button className="button-primary flex-1" disabled={saving || !canApprove} onClick={() => decide("approved")}>Approve</button><button className="button-secondary flex-1" disabled={saving || !canApprove} onClick={() => decide("rejected")}>Reject</button></div></>}</div>}</div>}
   </>;
 }
 function AuditPage() {
@@ -149,5 +185,5 @@ function AuditPage() {
   return <><PageTitle title="Audit log" subtitle="Every pipeline decision, in one place." /><input className="field mb-5" placeholder="Filter by entity type" value={filter} onChange={e => setFilter(e.target.value)} /><State loading={loading} error={error} empty={!loading && !error && !items.length} />{!loading && !error && !!items.length && <div className="card overflow-auto"><table className="w-full min-w-[700px] text-left text-sm"><thead className="border-b border-white/10 text-xs uppercase text-white/40"><tr><th className="p-4">Time</th><th>Action</th><th>Entity</th><th>Actor</th><th>Formula</th></tr></thead><tbody>{items.map(item => <tr key={item.id} className="border-b border-white/5 last:border-0"><td className="p-4 text-white/50">{new Date(item.timestamp).toLocaleString()}</td><td>{item.action}</td><td>{item.entity_type} · {item.entity_id}</td><td>{item.actor}</td><td className="text-white/60">{item.formula}</td></tr>)}</tbody></table></div>}</>;
 }
 function Landing() { return <LandingCta />; }
-function App() { return <BrowserRouter><Routes><Route path="/" element={<Landing />} /><Route path="/app" element={<Layout />}><Route index element={<Dashboard />} /><Route path="exceptions" element={<ExceptionsPage />} /><Route path="adjustments" element={<AdjustmentsPage />} /><Route path="audit" element={<AuditPage />} /></Route></Routes></BrowserRouter>; }
+function App() { return <BrowserRouter><Routes><Route path="/" element={<Landing />} /><Route path="/login" element={<LoginPage />} /><Route path="/app" element={<ProtectedRoute><Layout /></ProtectedRoute>}><Route index element={<Dashboard />} /><Route path="exceptions" element={<ExceptionsPage />} /><Route path="adjustments" element={<AdjustmentsPage />} /><Route path="audit" element={<AuditPage />} /></Route></Routes></BrowserRouter>; }
 export default App;

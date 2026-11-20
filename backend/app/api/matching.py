@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.auth.security import get_current_user, require_roles
 from app.database import get_db
 from app.services.matching.engine import list_matches, run_matching
 
 router = APIRouter(prefix="/matching", tags=["matching"])
 
 
-@router.post("/run")
+@router.post("/run", dependencies=[Depends(require_roles("analyst", "admin"))])
 def run(db: Session = Depends(get_db)) -> dict[str, object]:  # noqa: B008
     result = run_matching(db)
     return {
@@ -18,6 +19,6 @@ def run(db: Session = Depends(get_db)) -> dict[str, object]:  # noqa: B008
     }
 
 
-@router.get("/results")
+@router.get("/results", dependencies=[Depends(get_current_user)])
 def results(db: Session = Depends(get_db)) -> list[dict[str, object]]:  # noqa: B008
     return list_matches(db)

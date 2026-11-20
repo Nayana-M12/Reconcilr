@@ -1,8 +1,8 @@
 """AI similarity suggestions"""
+
 import sqlalchemy as sa
 
 from alembic import op
-
 
 revision = "0003_ai_suggestions"
 down_revision = "0002_agent_runs"

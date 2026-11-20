@@ -60,6 +60,40 @@ Run the test suite from `backend`:
 pytest
 ```
 
+## Authentication, `/docs`, and demo users
+
+All API endpoints except `GET /health` and `POST /auth/login` require a signed
+Bearer JWT (`Authorization: Bearer <token>`). Roles are always derived from
+the verified token, never from request bodies:
+
+- `admin`: full access including user management
+- `analyst`: import data, run reconciliation pipelines, run AI agent/suggestions
+- `approver`: approve or reject proposed adjustments
+- `auditor`: read-only access to dashboards, exceptions, adjustments, and audit log
+
+Configure secrets and runtime settings via environment variables (never commit
+`.env` or real passwords):
+
+- `JWT_SECRET` — signing key for JWT tokens (required in production)
+- `APP_ENV` — set to `development` to allow `/docs`, `/redoc`, and `/openapi.json` without a token (default: `production`)
+- `CORS_ORIGINS` — comma-separated frontend origins (default: `http://localhost:5173,http://127.0.0.1:5173`)
+- `MAX_UPLOAD_SIZE_BYTES` — maximum upload size in bytes (default: `10485760` / 10 MB)
+
+To create demo users, set password environment variables in your shell and run
+the seed script from `backend/`:
+
+```powershell
+$env:DEMO_ADMIN_PASSWORD = "<choose-a-strong-password>"
+$env:DEMO_ANALYST_PASSWORD = "<choose-a-strong-password>"
+$env:DEMO_APPROVER_PASSWORD = "<choose-a-strong-password>"
+$env:DEMO_AUDITOR_PASSWORD = "<choose-a-strong-password>"
+python -m scripts.seed_users
+```
+
+This creates (or updates) usernames `admin`, `analyst`, `approver`, and `auditor`.
+In development (`APP_ENV=development`), open `http://127.0.0.1:8000/docs`, click
+**Authorize**, enter a demo user's credentials, and test protected endpoints.
+
 ## Demo flow
 
 After importing the source data, run the reconciliation workflow in this order:

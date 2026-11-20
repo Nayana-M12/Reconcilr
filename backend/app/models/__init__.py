@@ -10,6 +10,7 @@ from app.models.entities import (
     Match,
     Payment,
     PurchaseOrder,
+    User,
     Vendor,
     VendorAlias,
 )
@@ -26,6 +27,7 @@ __all__ = [
     "Match",
     "Payment",
     "PurchaseOrder",
+    "User",
     "Vendor",
     "VendorAlias",
 ]

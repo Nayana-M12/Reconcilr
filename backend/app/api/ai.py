@@ -8,12 +8,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ai.suggestions import suggest_near_duplicates, suggest_vendor_aliases
+from app.auth.security import actor_from_user, require_roles
 from app.database import get_db
 from app.models import (
     AISuggestion,
     Evidence,
     ExceptionCase,
     Invoice,
+    User,
     Vendor,
     VendorAlias,
 )
@@ -70,12 +72,12 @@ def _persist_suggestions(db: Session, suggestions: list[dict[str, Any]]) -> list
     return output
 
 
-@router.post("/vendor-suggestions")
+@router.post("/vendor-suggestions", dependencies=[Depends(require_roles("analyst", "approver", "admin"))])
 def vendor_suggestions(db: Session = Depends(get_db)) -> list[dict[str, Any]]:  # noqa: B008
     return _persist_suggestions(db, suggest_vendor_aliases(db))
 
 
-@router.post("/duplicate-suggestions")
+@router.post("/duplicate-suggestions", dependencies=[Depends(require_roles("analyst", "approver", "admin"))])
 def duplicate_suggestions(db: Session = Depends(get_db)) -> list[dict[str, Any]]:  # noqa: B008
     return _persist_suggestions(db, suggest_near_duplicates(db))
 
@@ -121,7 +123,10 @@ def _accept_near_duplicate(db: Session, suggestion: AISuggestion) -> str:
 
 @router.post("/suggestions/{suggestion_id}/accept")
 def accept_suggestion(
-    suggestion_id: str, request: DecisionRequest, db: Session = Depends(get_db)  # noqa: B008
+    suggestion_id: str,
+    request: DecisionRequest,
+    db: Session = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(require_roles("analyst", "approver", "admin")),  # noqa: B008
 ) -> dict[str, Any]:
     suggestion = db.get(AISuggestion, suggestion_id)
     if suggestion is None:
@@ -147,9 +152,11 @@ def accept_suggestion(
     else:
         output["exception_id"] = _accept_near_duplicate(db, suggestion)
     suggestion.status = "accepted"
+    actor = actor_from_user(current_user, fallback=request.role)
+    role = current_user.role if isinstance(current_user, User) else request.role
     write_audit(
-        db, actor=request.role, action="ai_suggestion_accept", entity_type="AISuggestion",
-        entity_id=suggestion.id, inputs={"role": request.role, "note": request.note},
+        db, actor=actor, action="ai_suggestion_accept", entity_type="AISuggestion",
+        entity_id=suggestion.id, inputs={"role": role, "note": request.note},
         formula="Human accepted an AI suggestion; deterministic reconciliation remains unchanged",
         output=output,
     )
@@ -159,7 +166,10 @@ def accept_suggestion(
 
 @router.post("/suggestions/{suggestion_id}/reject")
 def reject_suggestion(
-    suggestion_id: str, request: DecisionRequest, db: Session = Depends(get_db)  # noqa: B008
+    suggestion_id: str,
+    request: DecisionRequest,
+    db: Session = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(require_roles("analyst", "approver", "admin")),  # noqa: B008
 ) -> dict[str, Any]:
     suggestion = db.get(AISuggestion, suggestion_id)
     if suggestion is None:
@@ -167,9 +177,11 @@ def reject_suggestion(
     if suggestion.status != "pending":
         raise HTTPException(status_code=409, detail=f"Suggestion is already {suggestion.status}")
     suggestion.status = "rejected"
+    actor = actor_from_user(current_user, fallback=request.role)
+    role = current_user.role if isinstance(current_user, User) else request.role
     write_audit(
-        db, actor=request.role, action="ai_suggestion_reject", entity_type="AISuggestion",
-        entity_id=suggestion.id, inputs={"role": request.role, "note": request.note},
+        db, actor=actor, action="ai_suggestion_reject", entity_type="AISuggestion",
+        entity_id=suggestion.id, inputs={"role": role, "note": request.note},
         formula="Human rejected an AI similarity suggestion",
         output={"status": suggestion.status},
     )

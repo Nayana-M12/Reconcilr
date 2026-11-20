@@ -77,6 +77,43 @@
   },
   "hallucination_rate": 0.0,
   "unresolved_correctness": 1.0,
-  "extraction_accuracy": null,
-  "extraction_status": "not implemented"
+  "extraction_accuracy": 1.0,
+  "extraction_by_field": {
+    "currency": {
+      "correct": 4,
+      "total": 4,
+      "accuracy": 1.0
+    },
+    "date": {
+      "correct": 4,
+      "total": 4,
+      "accuracy": 1.0
+    },
+    "document_number": {
+      "correct": 4,
+      "total": 4,
+      "accuracy": 1.0
+    },
+    "document_type": {
+      "correct": 4,
+      "total": 4,
+      "accuracy": 1.0
+    },
+    "po_reference": {
+      "correct": 1,
+      "total": 1,
+      "accuracy": 1.0
+    },
+    "total_amount": {
+      "correct": 4,
+      "total": 4,
+      "accuracy": 1.0
+    },
+    "vendor": {
+      "correct": 4,
+      "total": 4,
+      "accuracy": 1.0
+    }
+  },
+  "extraction_status": "evaluated"
 }

@@ -46,6 +46,24 @@ Use `POST /imports/{record_type}` for each import. CSV and Excel files are
 supported; invalid rows are reported individually and re-imported rows are
 reported as duplicates.
 
+## Document import
+
+Upload one or more `.pdf` (text-based) or `.txt` invoices, purchase orders, or
+payment advices via `POST /import/document` (requires `analyst` or `admin` role):
+
+- Deterministic regex/rule parsers classify the document (`invoice`,
+  `purchase_order`, `payment`) and extract document number, vendor, ISO date,
+  currency, `Decimal` total amount, and PO reference when present.
+- Every extracted field carries provenance (`page`, exact `snippet`, and rule
+  `confidence`).
+- Required fields are never guessed: any document missing a required field is
+  returned under `needs_review` and is **not** imported.
+- Complete documents are routed through the existing `import_records` pipeline
+  so deduplication and audit logging behave identically to CSV imports.
+- Scanned PDFs and images require optional OCR (`EXTRACTION_OCR=1` with
+  `pytesseract` installed); otherwise the API returns a clear `"OCR not enabled"`
+  message under `unsupported`.
+
 ## Run the server and tests
 
 Start the development server from `backend`:

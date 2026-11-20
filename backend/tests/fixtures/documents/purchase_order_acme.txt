@@ -1,0 +1,6 @@
+PURCHASE ORDER
+PO Number: PO-DOC-1001
+Supplier: Acme Corp
+Order Date: February 10, 2026
+Currency: USD
+Order Total: 1,250.75 USD

@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.agent.investigate import investigate_exception
 from app.ai.suggestions import suggest_near_duplicates, suggest_vendor_aliases
 from app.database import Base
+from app.extraction import parse_document, read_document_text
 from app.models import Evidence, ExceptionCase, Invoice, Match, Payment, PurchaseOrder
 from app.services.exceptions.engine import run_exceptions
 from app.services.importer import import_records
@@ -44,6 +45,7 @@ def build_report() -> dict[str, Any]:
             exceptions = _exception_metrics(db, truth)
             similarity = _similarity_metrics(db, truth)
             agent = _agent_metrics(db)
+    extraction = _extraction_metrics()
     return {
         "matching": matching,
         "duplicates": duplicates,
@@ -51,8 +53,50 @@ def build_report() -> dict[str, Any]:
         "similarity": similarity,
         "hallucination_rate": agent["hallucination_rate"],
         "unresolved_correctness": agent["unresolved_correctness"],
-        "extraction_accuracy": None,
-        "extraction_status": "not implemented",
+        "extraction_accuracy": extraction["overall_accuracy"],
+        "extraction_by_field": extraction["by_field"],
+        "extraction_status": extraction["status"],
+    }
+
+
+def _extraction_metrics() -> dict[str, Any]:
+    fixtures_dir = Path(__file__).parents[1] / "tests" / "fixtures" / "documents"
+    labels_path = fixtures_dir / "labels.json"
+    if not labels_path.exists():
+        return {"overall_accuracy": None, "by_field": {}, "status": "fixtures not found"}
+    labels = json.loads(labels_path.read_text(encoding="utf-8"))
+    field_totals: dict[str, int] = {}
+    field_correct: dict[str, int] = {}
+    for spec in labels.get("documents", []):
+        doc_path = fixtures_dir / spec["filename"]
+        pages = read_document_text(spec["filename"], doc_path.read_bytes())
+        extracted = parse_document(pages)
+        found = extracted.fields_found_dict()
+        for field_name, expected_val in spec.get("expected", {}).items():
+            field_totals[field_name] = field_totals.get(field_name, 0) + 1
+            if found.get(field_name) == expected_val:
+                field_correct[field_name] = field_correct.get(field_name, 0) + 1
+        for missing_field in spec.get("expected_missing", []):
+            field_totals[missing_field] = field_totals.get(missing_field, 0) + 1
+            if missing_field in extracted.fields_missing and missing_field not in found:
+                field_correct[missing_field] = field_correct.get(missing_field, 0) + 1
+    by_field: dict[str, dict[str, float | int]] = {}
+    total_checks = 0
+    total_correct = 0
+    for field_name in sorted(field_totals):
+        total = field_totals[field_name]
+        correct = field_correct.get(field_name, 0)
+        total_checks += total
+        total_correct += correct
+        by_field[field_name] = {
+            "correct": correct,
+            "total": total,
+            "accuracy": correct / total if total else 1.0,
+        }
+    return {
+        "overall_accuracy": total_correct / total_checks if total_checks else None,
+        "by_field": by_field,
+        "status": "evaluated",
     }
 
 
@@ -254,7 +298,16 @@ def markdown(report: dict[str, Any]) -> str:
             "duplicate-copy records are excluded. Matcher output is used only as actual output."
         ),
         "",
-        "Extraction is not implemented; extraction accuracy is reported as null.",
+        "## Document extraction accuracy by field",
+        "",
+        "| Field | Correct | Total | Accuracy |",
+        "| --- | ---: | ---: | ---: |",
+        *[
+            f"| {field} | {metrics['correct']} | {metrics['total']} | {metrics['accuracy']} |"
+            for field, metrics in report.get("extraction_by_field", {}).items()
+        ],
+        "",
+        "Extraction labels come from `backend/tests/fixtures/documents/labels.json`, never from parser output.",
     ])
 
 

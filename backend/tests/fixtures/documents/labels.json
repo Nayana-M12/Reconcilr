@@ -1,0 +1,54 @@
+{
+  "documents": [
+    {
+      "filename": "invoice_acme.pdf",
+      "expected": {
+        "document_type": "invoice",
+        "document_number": "INV-DOC-1001",
+        "vendor": "Acme Corp",
+        "date": "2026-02-14",
+        "currency": "USD",
+        "total_amount": "1250.75",
+        "po_reference": "PO-DOC-1001"
+      },
+      "expected_missing": []
+    },
+    {
+      "filename": "purchase_order_acme.txt",
+      "expected": {
+        "document_type": "purchase_order",
+        "document_number": "PO-DOC-1001",
+        "vendor": "Acme Corp",
+        "date": "2026-02-10",
+        "currency": "USD",
+        "total_amount": "1250.75"
+      },
+      "expected_missing": []
+    },
+    {
+      "filename": "payment_advice_acme.pdf",
+      "expected": {
+        "document_type": "payment",
+        "document_number": "PAY-DOC-1001",
+        "vendor": "Acme Corp",
+        "date": "2026-02-20",
+        "currency": "USD",
+        "total_amount": "1250.75"
+      },
+      "expected_missing": []
+    },
+    {
+      "filename": "invoice_missing_amount.txt",
+      "expected": {
+        "document_type": "invoice",
+        "document_number": "INV-DOC-1002",
+        "vendor": "Acme Corp",
+        "date": "2026-02-15",
+        "currency": "USD"
+      },
+      "expected_missing": [
+        "total_amount"
+      ]
+    }
+  ]
+}

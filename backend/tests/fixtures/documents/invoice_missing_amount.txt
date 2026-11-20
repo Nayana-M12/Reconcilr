@@ -1,0 +1,6 @@
+INVOICE
+Invoice Number: INV-DOC-1002
+Vendor: Acme Corp
+Invoice Date: 2026-02-15
+Currency: USD
+Notes: Total pending final adjustment

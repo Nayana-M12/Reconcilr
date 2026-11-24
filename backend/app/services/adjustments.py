@@ -77,10 +77,16 @@ def _calculation(db: Session, case: ExceptionCase) -> tuple[Decimal, dict[str, A
     return result, calculation, formula
 
 
-def propose_adjustments(db: Session) -> list[Adjustment]:
+def propose_adjustments(
+    db: Session,
+    exception_ids: list[str] | None = None,
+) -> list[Adjustment]:
     settings = get_settings()
     adjustments: list[Adjustment] = []
-    cases = list(db.scalars(select(ExceptionCase).where(ExceptionCase.status == "open")))
+    query = select(ExceptionCase).where(ExceptionCase.status == "open")
+    if exception_ids is not None:
+        query = query.where(ExceptionCase.id.in_(exception_ids))
+    cases = list(db.scalars(query))
     for case in cases:
         existing = db.scalar(select(Adjustment).where(Adjustment.exception_id == case.id,
                                                        Adjustment.status == "pending"))

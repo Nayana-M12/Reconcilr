@@ -21,7 +21,6 @@ class InvestigateRequest(BaseModel):
 
 
 class DecisionRequest(BaseModel):
-    role: str = "human"
     note: str | None = None
 
 
@@ -70,11 +69,11 @@ def accept_run(
         raise HTTPException(status_code=409, detail=f"Run is already {run.status}")
     result = InvestigationResult.model_validate_json(run.explanation)
     if result.proposed_action == "propose_adjustment":
-        propose_adjustments(db)
+        propose_adjustments(db, exception_ids=[run.exception_id])
     run.status = "accepted"
     write_audit(
-        db, actor=request.role, action="agent_accept", entity_type="AgentRun", entity_id=run.id,
-        inputs={"role": request.role}, formula="Human accepted verified agent recommendation",
+        db, actor=user.username, action="agent_accept", entity_type="AgentRun", entity_id=run.id,
+        inputs={"note": request.note}, formula="Human accepted verified agent recommendation",
         output={"status": run.status, "proposed_action": result.proposed_action},
     )
     db.commit()
@@ -95,8 +94,8 @@ def override_run(
         raise HTTPException(status_code=409, detail=f"Run is already {run.status}")
     run.status = "overridden"
     write_audit(
-        db, actor=request.role, action="agent_override", entity_type="AgentRun", entity_id=run.id,
-        inputs={"role": request.role, "note": request.note}, formula="Human override of agent recommendation",
+        db, actor=user.username, action="agent_override", entity_type="AgentRun", entity_id=run.id,
+        inputs={"note": request.note}, formula="Human override of agent recommendation",
         output={"status": run.status},
     )
     db.commit()

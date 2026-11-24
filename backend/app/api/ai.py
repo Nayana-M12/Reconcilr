@@ -25,7 +25,6 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 
 
 class DecisionRequest(BaseModel):
-    role: str = "human"
     note: str | None = None
 
 
@@ -122,7 +121,7 @@ def _accept_near_duplicate(db: Session, suggestion: AISuggestion) -> str:
                 note="Candidate invoice cited by accepted near-duplicate suggestion.",
             ),
         ])
-    propose_adjustments(db)
+    propose_adjustments(db, exception_ids=[case.id])
     return case.id
 
 
@@ -158,8 +157,8 @@ def accept_suggestion(
         output["exception_id"] = _accept_near_duplicate(db, suggestion)
     suggestion.status = "accepted"
     write_audit(
-        db, actor=request.role, action="ai_suggestion_accept", entity_type="AISuggestion",
-        entity_id=suggestion.id, inputs={"role": request.role, "note": request.note},
+        db, actor=user.username, action="ai_suggestion_accept", entity_type="AISuggestion",
+        entity_id=suggestion.id, inputs={"note": request.note},
         formula="Human accepted an AI suggestion; deterministic reconciliation remains unchanged",
         output=output,
     )
@@ -181,8 +180,8 @@ def reject_suggestion(
         raise HTTPException(status_code=409, detail=f"Suggestion is already {suggestion.status}")
     suggestion.status = "rejected"
     write_audit(
-        db, actor=request.role, action="ai_suggestion_reject", entity_type="AISuggestion",
-        entity_id=suggestion.id, inputs={"role": request.role, "note": request.note},
+        db, actor=user.username, action="ai_suggestion_reject", entity_type="AISuggestion",
+        entity_id=suggestion.id, inputs={"note": request.note},
         formula="Human rejected an AI similarity suggestion",
         output={"status": suggestion.status},
     )

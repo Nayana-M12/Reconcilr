@@ -5,6 +5,11 @@ export type Exception = {
   id: string; type: string; status: string; severity: string; description: string;
   invoice_id: string | null; po_id: string | null; payment_id: string | null;
   evidence: { id: string; record_type: string; record_id: string; note: string }[];
+  related: {
+    invoice: { invoice_number: string; vendor_name: string; amount: string; currency: string } | null;
+    purchase_order: { po_number: string; amount: string; currency: string } | null;
+    payment: { amount: string; currency: string; payment_date: string } | null;
+  };
 };
 export type Adjustment = {
   id: string; exception_id: string; proposed_amount: string; calculation: {
@@ -20,6 +25,31 @@ export type AuditEntry = {
 export type ImportResponse = {
   record_type: string; source_file: string; imported: number; rejected: number;
   duplicates: number; errors: Record<string, unknown>[]; ids: string[];
+};
+export type ExtractionResult = {
+  filename: string;
+  method: string;
+  fields: {
+    invoice_number?: string; po_number?: string; vendor_name?: string;
+    invoice_date?: string; due_date?: string; payment_date?: string;
+    invoice_amount?: string; tax_amount?: string; payment_amount?: string;
+    reference?: string; description?: string;
+  };
+  confidence: number;
+  warnings: string[];
+};
+export type Insights = {
+  volume: { total_transactions: number; invoices: number; purchase_orders: number; payments: number };
+  matching: { total_matches: number; matched_invoices: number; unmatched_invoices: number; by_tier: Record<string, number>; match_rate_pct: number };
+  exceptions: { total: number; open: number; resolved: number; high_risk_open: number; by_type: Record<string, number>; recurring_types: { type: string; count: number }[] };
+  ai: { agent_runs: number; agent_explained: number; agent_pending_review: number; ai_suggestions: number; ai_suggestions_accepted: number };
+  adjustments: { pending: number; approved: number; rejected: number };
+  recent_investigations: { exception_id: string; verdict: string; status: string; created_at: string | null }[];
+};
+export type AgentRun = {
+  id: string; exception_id: string; verdict: string; explanation: string;
+  claims: Record<string, unknown>[]; tool_calls: Record<string, unknown>[];
+  source: string; verification_status: string; errors: string[]; status: string; created_at: string;
 };
 export type AuthUser = { username: string; role: string };
 type LoginResponse = { access_token: string; token_type: string; role: string };
@@ -69,12 +99,10 @@ async function request<T>(
       headers.set("Content-Type", "application/json");
     }
     if (authToken && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${authToken}`);
-    const response = await fetch(`${BASE_URL}${path}`, {
-      ...init, headers,
-    });
+    const response = await fetch(`${BASE_URL}${path}`, { ...init, headers });
     if (!response.ok) {
       let detail = `Request failed (${response.status})`;
-      try { const body = await response.json(); detail = body.detail || detail; } catch { /* non-JSON response */ }
+      try { const body = await response.json(); detail = body.detail || detail; } catch { /* non-JSON */ }
       if (response.status === 401 && options.redirectOnUnauthorized !== false) {
         clearAuthToken();
         window.location.assign(`/login?message=${encodeURIComponent("Your session expired. Sign in again.")}`);
@@ -88,6 +116,7 @@ async function request<T>(
     throw error;
   }
 }
+
 export const login = async (username: string, password: string) => {
   const result = await request<LoginResponse>("/login", {
     method: "POST",
@@ -96,6 +125,7 @@ export const login = async (username: string, password: string) => {
   setAuthToken(result.access_token);
   return getAuthUser();
 };
+
 export const getSummary = () => request<Summary>("/summary");
 export const getHealth = () => request<{ status: string }>("/health");
 export const importRecords = (recordType: string, file: File) => {
@@ -106,11 +136,38 @@ export const getMatches = () => request<Record<string, unknown>[]>("/matching/re
 export const runMatching = () => request<Record<string, unknown>>("/matching/run", { method: "POST" });
 export const runExceptions = () => request<Record<string, unknown>>("/exceptions/run", { method: "POST" });
 export const proposeAdjustments = () => request<Adjustment[]>("/adjustments/propose", { method: "POST" });
-export const getExceptions = (filters: Record<string, string>) => request<Exception[]>(`/exceptions?${new URLSearchParams(filters)}`);
+export const getExceptions = (filters: Record<string, string>) =>
+  request<Exception[]>(`/exceptions?${new URLSearchParams(filters)}`);
 export const getException = (id: string) => request<Exception>(`/exceptions/${id}`);
 export const getAdjustments = () => request<Adjustment[]>("/adjustments");
 export const getAdjustment = (id: string) => request<Adjustment>(`/adjustments/${id}`);
-export const decideAdjustment = (id: string, body: { role: string; decision: "approved" | "rejected"; comment: string }) =>
-  request<Adjustment>(`/adjustments/${id}/decision`, { method: "POST", body: JSON.stringify(body) });
+export const decideAdjustment = (
+  id: string,
+  body: { role: string; decision: "approved" | "rejected"; comment: string },
+) => request<Adjustment>(`/adjustments/${id}/decision`, { method: "POST", body: JSON.stringify(body) });
 export const getAudit = (entityType = "", limit = 100) =>
-  request<AuditEntry[]>(`/audit?${new URLSearchParams({ ...(entityType ? { entity_type: entityType } : {}), limit: String(limit) })}`);
+  request<AuditEntry[]>(`/audit?${new URLSearchParams({
+    ...(entityType ? { entity_type: entityType } : {}),
+    limit: String(limit),
+  })}`);
+export const extractDocument = (file: File) => {
+  const body = new FormData(); body.append("file", file);
+  return request<ExtractionResult>("/extract", { method: "POST", body });
+};
+export const getInsights = () => request<Insights>("/insights");
+export const getAgentRuns = () => request<AgentRun[]>("/agent/runs");
+export const investigateException = (exception_id: string | null) =>
+  request<AgentRun[]>("/agent/investigate", {
+    method: "POST",
+    body: JSON.stringify({ exception_id }),
+  });
+export const acceptRun = (id: string, note?: string) =>
+  request<AgentRun>(`/agent/runs/${id}/accept`, {
+    method: "POST",
+    body: JSON.stringify({ note: note ?? null }),
+  });
+export const overrideRun = (id: string, note?: string) =>
+  request<AgentRun>(`/agent/runs/${id}/override`, {
+    method: "POST",
+    body: JSON.stringify({ note: note ?? null }),
+  });

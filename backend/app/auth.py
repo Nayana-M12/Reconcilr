@@ -13,6 +13,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.database import get_db
 from app.models import User
 
@@ -28,7 +29,7 @@ class AuthenticatedUser:
 
 
 def _secret() -> str:
-    secret = os.getenv("JWT_SECRET", "")
+    secret = get_settings().jwt_secret
     if not secret:
         raise HTTPException(status_code=503, detail="JWT_SECRET is not configured")
     return secret
@@ -48,9 +49,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def create_access_token(user: User) -> str:
-    expires_at = datetime.now(UTC) + timedelta(
-        minutes=int(os.getenv("JWT_EXPIRY_MINUTES", "15"))
-    )
+    expires_at = datetime.now(UTC) + timedelta(minutes=get_settings().jwt_expiry_minutes)
     payload = {
         "sub": user.id,
         "username": user.username,

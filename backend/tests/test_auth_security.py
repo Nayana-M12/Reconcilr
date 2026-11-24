@@ -15,11 +15,13 @@ from app.models import Adjustment, ApprovalStep, AuditLog, ExceptionCase, User
 @pytest.fixture
 def client(db, monkeypatch):
     monkeypatch.setenv("JWT_SECRET", secrets.token_urlsafe(32))
+    get_settings.cache_clear()
     app.dependency_overrides[get_db] = lambda: db
     try:
         yield TestClient(app)
     finally:
         app.dependency_overrides.pop(get_db, None)
+        get_settings.cache_clear()
 
 
 def _user(db, username: str, role: str) -> User:

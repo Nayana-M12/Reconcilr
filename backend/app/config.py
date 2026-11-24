@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     exception_critical_amount_threshold: Decimal = Decimal("1000.00")
     approval_small_amount_threshold: Decimal = Decimal("100.00")
     approval_medium_amount_threshold: Decimal = Decimal("1000.00")
+    jwt_secret: str = ""
+    jwt_expiry_minutes: int = 15
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 

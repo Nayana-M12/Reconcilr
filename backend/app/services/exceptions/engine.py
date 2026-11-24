@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.config import get_settings
 from app.models import Evidence, ExceptionCase, Invoice, Match, Payment, PurchaseOrder
@@ -74,27 +74,83 @@ def run_exceptions(db: Session) -> ExceptionRunResult:
     return ExceptionRunResult(created, existing, by_type)
 
 
+def _related(invoice: Invoice | None, po: PurchaseOrder | None, payment: Payment | None) -> dict[str, Any]:
+    return {
+        "invoice": {
+            "invoice_number": invoice.invoice_number,
+            "vendor_name": invoice.vendor.name,
+            "amount": str(invoice.amount),
+            "currency": invoice.currency,
+        } if invoice else None,
+        "purchase_order": {
+            "po_number": po.po_number,
+            "amount": str(po.amount),
+            "currency": po.currency,
+        } if po else None,
+        "payment": {
+            "amount": str(payment.amount),
+            "currency": payment.currency,
+            "payment_date": payment.payment_date.isoformat(),
+        } if payment else None,
+    }
+
+
 def _serialize_case(db: Session, case: ExceptionCase) -> dict[str, Any]:
     evidence = list(db.scalars(select(Evidence).where(Evidence.exception_id == case.id).order_by(Evidence.id)))
+    invoice = db.scalar(select(Invoice).options(joinedload(Invoice.vendor)).where(Invoice.id == case.invoice_id)) if case.invoice_id else None
+    po = db.get(PurchaseOrder, case.po_id) if case.po_id else None
+    payment = db.get(Payment, case.payment_id) if case.payment_id else None
     return {
         "id": case.id, "type": case.type, "status": case.status, "severity": case.severity,
         "invoice_id": case.invoice_id, "po_id": case.po_id, "payment_id": case.payment_id,
         "description": case.description,
         "evidence": [{"id": item.id, "record_type": item.record_type, "record_id": item.record_id, "note": item.note}
                      for item in evidence],
+        "related": _related(invoice, po, payment),
     }
 
 
 def list_exceptions(db: Session, exception_type: str | None = None, status: str | None = None,
                     severity: str | None = None) -> list[dict[str, Any]]:
-    query = select(ExceptionCase).order_by(ExceptionCase.created_at, ExceptionCase.id)
+    query = (
+        select(ExceptionCase)
+        .options(
+            joinedload(ExceptionCase.invoice).joinedload(Invoice.vendor),
+            joinedload(ExceptionCase.purchase_order),
+            joinedload(ExceptionCase.payment),
+        )
+        .order_by(ExceptionCase.created_at, ExceptionCase.id)
+    )
     if exception_type:
         query = query.where(ExceptionCase.type == exception_type)
     if status:
         query = query.where(ExceptionCase.status == status)
     if severity:
         query = query.where(ExceptionCase.severity == severity)
-    return [_serialize_case(db, case) for case in db.scalars(query)]
+    cases = list(db.scalars(query))
+    # load evidence for all cases in one query, then distribute
+    all_evidence = list(db.scalars(
+        select(Evidence).where(Evidence.exception_id.in_([c.id for c in cases])).order_by(Evidence.id)
+    )) if cases else []
+    evidence_by_case: dict[str, list[Evidence]] = {}
+    for item in all_evidence:
+        evidence_by_case.setdefault(item.exception_id, []).append(item)
+
+    result = []
+    for case in cases:
+        evidence = evidence_by_case.get(case.id, [])
+        invoice: Invoice | None = case.invoice
+        po: PurchaseOrder | None = case.purchase_order
+        payment: Payment | None = case.payment
+        result.append({
+            "id": case.id, "type": case.type, "status": case.status, "severity": case.severity,
+            "invoice_id": case.invoice_id, "po_id": case.po_id, "payment_id": case.payment_id,
+            "description": case.description,
+            "evidence": [{"id": item.id, "record_type": item.record_type, "record_id": item.record_id, "note": item.note}
+                         for item in evidence],
+            "related": _related(invoice, po, payment),
+        })
+    return result
 
 
 def get_exception(db: Session, exception_id: str) -> dict[str, Any] | None:

@@ -86,6 +86,9 @@ class ExceptionCase(Base):
     payment_id: Mapped[str | None] = mapped_column(ForeignKey("payments.id"))
     description: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    invoice: Mapped["Invoice | None"] = relationship("Invoice", foreign_keys=[invoice_id])
+    purchase_order: Mapped["PurchaseOrder | None"] = relationship("PurchaseOrder", foreign_keys=[po_id])
+    payment: Mapped["Payment | None"] = relationship("Payment", foreign_keys=[payment_id])
 
 
 class Evidence(Base):

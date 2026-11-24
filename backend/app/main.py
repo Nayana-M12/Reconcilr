@@ -10,7 +10,9 @@ from app.api.ai import router as ai_router
 from app.api.audit import router as audit_router
 from app.api.auth import router as auth_router
 from app.api.exceptions import router as exceptions_router
+from app.api.extract import router as extract_router
 from app.api.imports import router as imports_router
+from app.api.insights import router as insights_router
 from app.api.matching import router as matching_router
 from app.api.summary import router as summary_router
 from app.api.users import router as users_router
@@ -74,6 +76,7 @@ async def security_middleware(request: Request, call_next):
 app.include_router(auth_router)
 protected_dependencies = [Depends(get_current_user)]
 app.include_router(imports_router, dependencies=protected_dependencies)
+app.include_router(extract_router, dependencies=protected_dependencies)
 app.include_router(matching_router, dependencies=protected_dependencies)
 app.include_router(exceptions_router, dependencies=protected_dependencies)
 app.include_router(adjustments_router, dependencies=protected_dependencies)
@@ -81,6 +84,7 @@ app.include_router(ai_router, dependencies=protected_dependencies)
 app.include_router(agent_router, dependencies=protected_dependencies)
 app.include_router(audit_router, dependencies=protected_dependencies)
 app.include_router(summary_router, dependencies=protected_dependencies)
+app.include_router(insights_router, dependencies=protected_dependencies)
 app.include_router(users_router, dependencies=protected_dependencies)
 
 

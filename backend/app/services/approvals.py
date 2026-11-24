@@ -46,6 +46,7 @@ def decide(
     role: str,
     decision: str,
     comment: str | None,
+    actor_username: str | None = None,
 ) -> Adjustment:
     adjustment = db.get(Adjustment, adjustment_id)
     if adjustment is None:
@@ -76,11 +77,11 @@ def decide(
 
     write_audit(
         db,
-        actor=role,
+        actor=actor_username or role,
         action="approval_decision",
         entity_type="Adjustment",
         entity_id=adjustment.id,
-        inputs={"role": role, "decision": decision, "comment": comment},
+        inputs={"approver_role": role, "decision": decision, "comment": comment},
         formula="pending -> approved/rejected; all required steps must approve",
         output={
             "previous_status": previous_status,

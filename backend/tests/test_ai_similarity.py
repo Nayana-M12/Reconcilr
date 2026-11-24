@@ -40,7 +40,7 @@ def test_mocked_model_similarity_is_used(monkeypatch):
     assert result == similarity.SimilarityResult(0.91, "mocked", "llm")
 
 
-def test_fake_record_id_is_rejected(db):
+def test_fake_record_id_is_rejected(db, analyst_user):
     suggestion = AISuggestion(
         kind="vendor_alias",
         record_ids=["fake-vendor", "real-vendor"],
@@ -52,18 +52,18 @@ def test_fake_record_id_is_rejected(db):
     db.add(suggestion)
     db.commit()
     with pytest.raises(HTTPException) as error:
-        accept_suggestion(suggestion.id, DecisionRequest(), db)
+        accept_suggestion(suggestion.id, DecisionRequest(), db, user=analyst_user)
     assert error.value.status_code == 400
 
 
-def test_accepting_vendor_alias_twice_returns_conflict(db):
+def test_accepting_vendor_alias_twice_returns_conflict(db, analyst_user):
     _vendors(db)
     suggestions = _persist_suggestions(db, suggest_vendor_aliases(db))
     assert suggestions
     suggestion_id = suggestions[0]["id"]
-    accept_suggestion(suggestion_id, DecisionRequest(role="analyst"), db)
+    accept_suggestion(suggestion_id, DecisionRequest(), db, user=analyst_user)
     with pytest.raises(HTTPException) as error:
-        accept_suggestion(suggestion_id, DecisionRequest(role="analyst"), db)
+        accept_suggestion(suggestion_id, DecisionRequest(), db, user=analyst_user)
     assert error.value.status_code == 409
 
 

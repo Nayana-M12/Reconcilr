@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -19,3 +21,8 @@ def db():
         yield session
     finally:
         session.close()
+
+
+@pytest.fixture
+def analyst_user():
+    return SimpleNamespace(username="test-analyst", role="analyst")

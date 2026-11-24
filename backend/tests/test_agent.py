@@ -100,13 +100,13 @@ def test_llm_cannot_supply_a_literal_amount(db):
         verify_and_render(db, result, [{"ref": "tool_call_1", "result": {"records": []}}], source="llm")
 
 
-def test_accepting_run_twice_returns_conflict(db, monkeypatch):
+def test_accepting_run_twice_returns_conflict(db, monkeypatch, analyst_user):
     _prepare(db)
     monkeypatch.delenv("LLM_API_KEY", raising=False)
     monkeypatch.delenv("LLM_MODEL", raising=False)
     case = db.scalar(select(ExceptionCase).where(ExceptionCase.type == "PARTIAL_PAYMENT"))
     run = investigate_exception(db, case.id)
-    accept_run(run.id, DecisionRequest(role="analyst"), db)
+    accept_run(run.id, DecisionRequest(), db, user=analyst_user)
     with pytest.raises(Exception) as error:
-        accept_run(run.id, DecisionRequest(role="analyst"), db)
+        accept_run(run.id, DecisionRequest(), db, user=analyst_user)
     assert getattr(error.value, "status_code", None) == 409

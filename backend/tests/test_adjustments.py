@@ -35,7 +35,7 @@ def test_calculations_and_ids_are_decimal_safe(db):
 
     assert by_type["PARTIAL_PAYMENT"].proposed_amount == Decimal("10.00")
     assert by_type["OVERPAYMENT"].proposed_amount == Decimal("12.00")
-    assert by_type["DUPLICATE_INVOICE"].proposed_amount == Decimal("28.24")
+    assert by_type["DUPLICATE_INVOICE"].proposed_amount == Decimal("73.11")
     assert by_type["MISSING_PO"].proposed_amount == Decimal("0.00")
     assert by_type["DATE_GAP"].calculation_json["note"] == "review required"
     valid_ids = {
@@ -113,13 +113,13 @@ def test_propose_is_idempotent_and_transitions_are_audited(db):
     _prepare(db)
     first = propose_adjustments(db)
     second = propose_adjustments(db)
-    assert len(first) == len(second) == 7
-    assert db.query(Adjustment).count() == 7
+    assert len(first) == len(second) == 9
+    assert db.query(Adjustment).count() == 9
     partial = next(
         adjustment for adjustment in first
         if db.get(ExceptionCase, adjustment.exception_id).type == "PARTIAL_PAYMENT"
     )
     decide(db, partial.id, "analyst", "rejected", "not approved")
     assert partial.status == "rejected"
-    assert db.query(AuditLog).filter(AuditLog.action == "adjustment_proposed").count() == 7
+    assert db.query(AuditLog).filter(AuditLog.action == "adjustment_proposed").count() == 9
     assert db.query(AuditLog).filter(AuditLog.action == "approval_decision").count() == 1

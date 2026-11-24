@@ -78,7 +78,7 @@ def decision(
         steps = approval_steps(db, adjustment_id)
         pending = next((step for step in steps if step.decision == "pending"), None)
         decision_role = pending.approver_role if pending is not None else user.role
-        adjustment = decide(db, adjustment_id, decision_role, request.decision, request.comment)
+        adjustment = decide(db, adjustment_id, decision_role, request.decision, request.comment, actor_username=user.username)
     except ApprovalConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _serialize(db, adjustment)

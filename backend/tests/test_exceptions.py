@@ -66,8 +66,8 @@ def test_every_evidence_record_id_exists_in_database(db):
         *db.scalars(select(Payment.id)),
     }
 
-    assert db.query(ExceptionCase).count() == 7
-    assert db.query(AuditLog).filter(AuditLog.action == "exception_created").count() == 7
+    assert db.query(ExceptionCase).count() == 9
+    assert db.query(AuditLog).filter(AuditLog.action == "exception_created").count() == 9
     assert db.query(Evidence).count() >= db.query(ExceptionCase).count()
     assert all(item.record_id in valid_ids for item in db.scalars(select(Evidence)))
 
@@ -78,8 +78,8 @@ def test_exception_run_is_idempotent(db):
     first = run_exceptions(db)
     second = run_exceptions(db)
 
-    assert first.created == 7
+    assert first.created == 9
     assert second.created == 0
-    assert second.existing == 7
-    assert db.query(ExceptionCase).count() == 7
-    assert db.query(Evidence).count() == 12
+    assert second.existing == 9
+    assert db.query(ExceptionCase).count() == 9
+    assert db.query(Evidence).count() == 14

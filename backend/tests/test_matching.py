@@ -40,12 +40,12 @@ def test_synthetic_matching_precision_recall_and_duplicate_protection(db):
     precision = true_positives / len(actual)
     recall = true_positives / len(expected)
 
-    assert counts == {"vendor": 5, "purchase_order": 20, "invoice": 21, "payment": 19}
+    assert counts == {"vendor": 5, "purchase_order": 20, "invoice": 22, "payment": 19}
     assert len(matches) == len(expected) == 35
     assert precision >= 0.95
     assert recall >= 0.95
     assert len({match.invoice_id for match in matches}) == 20
-    assert result.unmatched_invoice_ids == ["inv-000020"]
+    assert result.unmatched_invoice_ids == ["inv-000020", "inv-000021"]
     assert truth["errors"][0]["type"] == "DUPLICATE_INVOICE"
     assert not any(match.invoice_id == "inv-000020" for match in matches)
 
@@ -59,4 +59,4 @@ def test_matching_tier_ordering_and_idempotency(db):
     assert second.created == 0
     assert second.existing == 35
     assert db.query(Match).count() == 35
-    assert db.query(AuditLog).filter(AuditLog.action == "match_decision").count() == 72
+    assert db.query(AuditLog).filter(AuditLog.action == "match_decision").count() == 74

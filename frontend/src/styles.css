@@ -663,3 +663,49 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   border-color: rgba(255, 138, 115, 0.8) !important;
   background: rgba(244, 118, 104, 0.12);
 }
+
+.auth-tabs {
+  margin-top: 20px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--soft-line);
+  background: #000;
+}
+
+.auth-tab {
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  transition: color 160ms ease, background 160ms ease;
+}
+
+.auth-tab:hover {
+  color: var(--ink);
+}
+
+.auth-tab.active {
+  color: #000;
+  font-weight: 600;
+  background: linear-gradient(110deg, var(--coral-start), var(--coral-end));
+}
+
+.auth-switch-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--coral-start);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.auth-switch-link:hover {
+  text-decoration: underline;
+}

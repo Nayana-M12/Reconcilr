@@ -36,13 +36,13 @@ import {
   proposeAdjustments,
   runExceptions,
   runMatching,
+  signup,
   Summary,
 } from "./api";
 import LandingCta from "./components/LandingCta";
 import AgentPage, { parseAgentExplanation } from "./pages/AgentPage";
 import EvaluationPage from "./pages/EvaluationPage";
 import ImportPage from "./pages/ImportPage";
-import RequestAccessPage from "./pages/RequestAccessPage";
 import UsersPage from "./pages/UsersPage";
 import "./styles.css";
 
@@ -109,14 +109,20 @@ function State({
   return null;
 }
 
-function LoginPage() {
+function AuthPage({ initialMode = "signin" }: { initialMode?: "signin" | "signup" }) {
   const navigate = useNavigate();
   const location = useLocation();
   const state = location.state as { message?: string; from?: string } | null;
+  const [mode, setMode] = useState<"signin" | "signup">(initialMode);
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(state?.message || "");
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
 
   if (getAuthToken() && getAuthUser()) {
     return <Navigate to="/app" replace />;
@@ -125,9 +131,17 @@ function LoginPage() {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError("");
+    if (mode === "signup" && password.length < 8) {
+      setError("Password must be at least 8 characters long.");
+      return;
+    }
     setSubmitting(true);
     try {
-      await login(username.trim(), password);
+      if (mode === "signin") {
+        await login(username.trim(), password);
+      } else {
+        await signup(username.trim(), email.trim(), password);
+      }
       navigate(state?.from || "/app", { replace: true });
     } catch (err) {
       setError(errorText(err));
@@ -142,8 +156,38 @@ function LoginPage() {
         <Link to="/" className="auth-brand">
           Reconcilr<span>.</span>
         </Link>
-        <h1>Sign in</h1>
-        <p className="auth-sub">Authenticate with your Reconcilr account to open the control room.</p>
+        <div className="auth-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "signin"}
+            className={mode === "signin" ? "auth-tab active" : "auth-tab"}
+            onClick={() => {
+              setMode("signin");
+              setError("");
+            }}
+          >
+            Sign in
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "signup"}
+            className={mode === "signup" ? "auth-tab active" : "auth-tab"}
+            onClick={() => {
+              setMode("signup");
+              setError("");
+            }}
+          >
+            Sign up
+          </button>
+        </div>
+        <h1>{mode === "signin" ? "Sign in" : "Create account"}</h1>
+        <p className="auth-sub">
+          {mode === "signin"
+            ? "Authenticate with your Reconcilr account to open the control room."
+            : "Create an analyst account to start importing and reconciling immediately."}
+        </p>
         {error && <div className="auth-alert">{error}</div>}
         <form onSubmit={handleSubmit} className="auth-form">
           <label className="auth-label">
@@ -153,16 +197,31 @@ function LoginPage() {
               autoComplete="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="analyst"
+              placeholder={mode === "signin" ? "admin" : "yourname"}
               required
             />
           </label>
+          {mode === "signup" && (
+            <label className="auth-label">
+              <span>Email</span>
+              <input
+                className="field w-full"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@company.com"
+                required
+              />
+            </label>
+          )}
           <label className="auth-label">
-            <span>Password</span>
+            <span>{mode === "signin" ? "Password" : "Password (min 8 characters)"}</span>
             <input
               className="field w-full"
               type="password"
-              autoComplete="current-password"
+              autoComplete={mode === "signin" ? "current-password" : "new-password"}
+              minLength={mode === "signup" ? 8 : undefined}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••••••"
@@ -170,12 +229,27 @@ function LoginPage() {
             />
           </label>
           <button className="button-primary w-full" type="submit" disabled={submitting}>
-            {submitting ? "Signing in..." : "Sign in"}
+            {submitting
+              ? mode === "signin"
+                ? "Signing in..."
+                : "Creating account..."
+              : mode === "signin"
+                ? "Sign in"
+                : "Sign up"}
           </button>
         </form>
         <div className="auth-footer-links">
           <Link to="/">← Back to landing</Link>
-          <Link to="/request-access">Request access</Link>
+          <button
+            type="button"
+            className="auth-switch-link"
+            onClick={() => {
+              setMode(mode === "signin" ? "signup" : "signin");
+              setError("");
+            }}
+          >
+            {mode === "signin" ? "Need an account? Sign up" : "Already have an account? Sign in"}
+          </button>
         </div>
       </div>
     </div>
@@ -1030,8 +1104,8 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/request-access" element={<RequestAccessPage />} />
+        <Route path="/login" element={<AuthPage initialMode="signin" />} />
+        <Route path="/signup" element={<AuthPage initialMode="signup" />} />
         <Route path="/app" element={<RequireAuth />}>
           <Route index element={<Dashboard />} />
           <Route path="import" element={<ImportPage />} />

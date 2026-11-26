@@ -240,3 +240,42 @@ def test_request_access_rate_limit(users_client):
         },
     )
     assert blocked.status_code == 429
+
+
+def test_direct_signup_creates_analyst_ignores_role_and_issues_token(users_client):
+    client, session_factory = users_client
+    short = client.post(
+        "/auth/signup",
+        json={"username": "quick_u", "email": "quick@example.com", "password": "short"},
+    )
+    assert short.status_code == 400
+
+    res = client.post(
+        "/auth/signup",
+        json={
+            "username": "quick_u",
+            "email": "quick@example.com",
+            "password": "QuickPassword123!",
+            "role": "admin",
+        },
+    )
+    assert res.status_code == 201
+    body = res.json()
+    assert body["user"]["username"] == "quick_u"
+    assert body["user"]["role"] == "analyst"
+    assert body["access_token"]
+
+    # Token works immediately on protected endpoints
+    summary = client.get("/summary", headers={"Authorization": f"Bearer {body['access_token']}"})
+    assert summary.status_code == 200
+
+    # Duplicate username returns 409
+    dup = client.post(
+        "/auth/signup",
+        json={"username": "quick_u", "email": "other@example.com", "password": "QuickPassword123!"},
+    )
+    assert dup.status_code == 409
+
+    with session_factory() as db:
+        actions = [entry.action for entry in db.scalars(select(AuditLog))]
+        assert "user_signup" in actions

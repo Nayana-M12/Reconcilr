@@ -57,6 +57,13 @@ class AccessRequestPayload(BaseModel):
     note: str | None = None
 
 
+class SignupPayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    username: str
+    email: str
+    password: str
+
+
 async def _extract_credentials(request: Request) -> tuple[str, str]:
     content_type = (request.headers.get("content-type") or "").lower()
     if "application/json" in content_type:
@@ -122,6 +129,63 @@ async def login(request: Request, db: Session = Depends(get_db)) -> dict[str, An
         inputs={"username": user.username},
         formula="Issued signed JWT access token",
         output={"authenticated": True, "role": user.role},
+    )
+    db.commit()
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "role": user.role,
+        },
+    }
+
+
+@router.post("/signup", status_code=status.HTTP_201_CREATED)
+def signup(
+    payload: SignupPayload,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> dict[str, Any]:
+    username = payload.username.strip()
+    email = payload.email.strip()
+    if not USERNAME_RE.fullmatch(username):
+        raise HTTPException(
+            status_code=400,
+            detail="Username must be 3-50 characters (letters, numbers, _, ., -).",
+        )
+    if not EMAIL_RE.fullmatch(email):
+        raise HTTPException(status_code=400, detail="Valid email address is required.")
+    if len(payload.password) < 8:
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at least 8 characters long.",
+        )
+    if db.scalar(select(User).where(User.username == username)) is not None:
+        raise HTTPException(status_code=409, detail="Username is already taken.")
+
+    # Never allow self-registration to choose admin or approver roles.
+    user = User(
+        username=username,
+        email=email,
+        password_hash=hash_password(payload.password),
+        role="analyst",
+        status="active",
+        is_active=True,
+        created_via="signup",
+    )
+    db.add(user)
+    db.flush()
+    token = create_access_token(user)
+    write_audit(
+        db,
+        actor=f"{user.username} ({user.role})",
+        action="user_signup",
+        entity_type="User",
+        entity_id=user.id,
+        inputs={"username": user.username, "email": email},
+        formula="Created active analyst account via public signup",
+        output={"role": user.role, "status": user.status},
     )
     db.commit()
     return {

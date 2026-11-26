@@ -328,6 +328,23 @@ export async function login(username: string, password: string): Promise<LoginRe
   return res;
 }
 
+export async function signup(
+  username: string,
+  email: string,
+  password: string,
+): Promise<LoginResponse> {
+  const res = await request<LoginResponse>(
+    "/auth/signup",
+    {
+      method: "POST",
+      body: JSON.stringify({ username, email, password }),
+    },
+    { skipAuthRedirect: true },
+  );
+  setAuthSession(res.access_token, res.user);
+  return res;
+}
+
 export const getMe = () => request<AuthUser>("/auth/me");
 export const getSummary = () => request<Summary>("/summary");
 export const getHealth = () => request<{ status: string }>("/health");

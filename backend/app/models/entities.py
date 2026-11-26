@@ -26,6 +26,7 @@ class Vendor(Base):
 class Invoice(Base):
     __tablename__ = "invoices"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     vendor_id: Mapped[str] = mapped_column(ForeignKey("vendors.id"), nullable=False, index=True)
     invoice_number: Mapped[str] = mapped_column(String(100), nullable=False)
     po_number: Mapped[str | None] = mapped_column(String(100))
@@ -42,11 +43,13 @@ class Invoice(Base):
 class PurchaseOrder(Base):
     __tablename__ = "purchase_orders"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     vendor_id: Mapped[str] = mapped_column(ForeignKey("vendors.id"), nullable=False, index=True)
     po_number: Mapped[str] = mapped_column(String(100), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     order_date: Mapped[date] = mapped_column(Date, nullable=False)
+    source_file: Mapped[str | None] = mapped_column(String(255), nullable=True)
     raw_row: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     vendor: Mapped[Vendor] = relationship(back_populates="purchase_orders")
 
@@ -54,11 +57,13 @@ class PurchaseOrder(Base):
 class Payment(Base):
     __tablename__ = "payments"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     vendor_id: Mapped[str] = mapped_column(ForeignKey("vendors.id"), nullable=False, index=True)
     reference: Mapped[str] = mapped_column(String(100), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     payment_date: Mapped[date] = mapped_column(Date, nullable=False)
+    source_file: Mapped[str | None] = mapped_column(String(255), nullable=True)
     raw_row: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     vendor: Mapped[Vendor] = relationship(back_populates="payments")
 
@@ -162,6 +167,7 @@ class VendorAlias(Base):
 class AISuggestion(Base):
     __tablename__ = "ai_suggestions"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     kind: Mapped[str] = mapped_column(String(30), nullable=False)
     record_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
@@ -169,6 +175,22 @@ class AISuggestion(Base):
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     source: Mapped[str] = mapped_column(String(20), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+
+class UploadedDocument(Base):
+    __tablename__ = "uploaded_documents"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    document_type: Mapped[str] = mapped_column(String(50), nullable=False)  # "invoice", "purchase_order", "payment"
+    content_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    file_size: Mapped[int] = mapped_column(nullable=False, default=0)
+    extraction_method: Mapped[str] = mapped_column(String(50), nullable=False, default="regex")
+    confidence: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False, default=Decimal("1.0"))
+    extracted_data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    raw_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="processed")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
 

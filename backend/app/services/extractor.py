@@ -59,15 +59,37 @@ _FIELD_PATTERNS: dict[str, list[str]] = {
         r"\bPO[-/#]?([A-Z0-9]{3,20})\b",
     ],
     "vendor_name": [
-        r"(?:vendor|supplier|from|billed\s*by)[:\s]+([A-Za-z][\w\s&,.'-]{2,60}?)(?:\n|$|,)",
+        r"(?:vendor|supplier|from|billed\s*by|seller)[:\s]+([A-Za-z][\w\s&,.'-]{2,60}?)(?:\n|$|,)",
         r"^([A-Za-z][\w\s&,.'-]{2,60}?)\s*\n",
     ],
     "reference": [
         r"(?:transaction|payment|ref(?:erence)?)\s*(?:no|number|#|id)?[:\s#]*([A-Z0-9][-A-Z0-9/]{2,30})",
         r"\bTXN[-/#]?([A-Z0-9]{3,20})\b",
+        r"\bPAY[-/#]?([A-Z0-9]{3,20})\b",
+    ],
+    "invoice_reference": [
+        r"(?:for\s*invoice|inv(?:oice)?\s*ref(?:erence)?|against\s*inv(?:oice)?)[:\s#]*([A-Z0-9][-A-Z0-9/]{2,30})",
+        r"\bINV[-/#]?([A-Z0-9]{3,20})\b",
     ],
     "description": [
-        r"(?:description|particulars|details|memo)[:\s]+(.{5,120}?)(?:\n|$)",
+        r"(?:description|particulars|details|memo|item|item\s*description)[:\s]+(.{3,120}?)(?:\n|$)",
+    ],
+    "payment_method": [
+        r"(?:payment\s*method|paid\s*via|payment\s*type|method)[:\s]+(ACH|Wire\s*Transfer|Wire|Credit\s*Card|Debit\s*Card|Check|Cheque|Bank\s*Transfer|Online|Card)\b",
+        r"\b(ACH|Wire Transfer|Wire|Credit Card|Check|Cheque|Bank Transfer)\b",
+    ],
+    "payment_status": [
+        r"(?:payment\s*status|status)[:\s]+(Paid|Completed|Cleared|Settled|Pending|Processing|Unpaid|Partially\s*Paid)\b",
+        r"\b(PAID|COMPLETED|CLEARED|SETTLED|PENDING|UNPAID)\b",
+    ],
+    "currency": [
+        r"\b(USD|EUR|GBP|INR|CAD|AUD|JPY)\b",
+    ],
+    "quantity": [
+        r"(?:qty|quantity|units)[:\s]+(\d+(?:\.\d+)?)\b",
+    ],
+    "unit_price": [
+        r"(?:unit\s*price|rate|price/unit)[:\s]*[\$£€₹]?\s*(\d+(?:\.\d{2})?)\b",
     ],
 }
 
@@ -82,6 +104,9 @@ _AMOUNT_FIELD_PATTERNS: dict[str, list[str]] = {
     "payment_amount": [
         r"(?:payment\s*amount|amount\s*paid|paid\s*amount)[:\s]*" + _AMOUNT_PATTERN,
         r"(?:total\s*payment)[:\s]*" + _AMOUNT_PATTERN,
+    ],
+    "total_amount": [
+        r"(?:total\s*amount|order\s*total|po\s*total|total)[:\s]*" + _AMOUNT_PATTERN,
     ],
 }
 
@@ -257,6 +282,12 @@ def extract_fields(filename: str, content: bytes) -> ExtractionResult:
         "payment_date": [
             r"(?:payment|paid)\s*(?:on|date)[:\s]+([\d/\- A-Za-z]+)",
         ],
+        "order_date": [
+            r"(?:order|po|purchase\s*order)\s*date[:\s]+([\d/\- A-Za-z]+)",
+        ],
+        "delivery_date": [
+            r"(?:delivery|expected|shipping|ship)\s*date[:\s]+([\d/\- A-Za-z]+)",
+        ],
     }
     for field_name, patterns in date_labels.items():
         value = _first_match(patterns, text)
@@ -280,6 +311,12 @@ def extract_fields(filename: str, content: bytes) -> ExtractionResult:
         if all_amounts:
             largest = str(max(Decimal(a) for a in all_amounts))
             fields["invoice_amount"] = largest
+    if "total_amount" not in fields and "invoice_amount" in fields:
+        fields["total_amount"] = fields["invoice_amount"]
+    elif "invoice_amount" not in fields and "total_amount" in fields:
+        fields["invoice_amount"] = fields["total_amount"]
+    if "payment_amount" not in fields and "total_amount" in fields:
+        fields["payment_amount"] = fields["total_amount"]
 
     result.fields = fields
     result.confidence = _score_fields(fields)
@@ -293,3 +330,187 @@ def extract_fields(filename: str, content: bytes) -> ExtractionResult:
         result.warnings.append("Low extraction confidence. Please verify all fields before saving.")
 
     return result
+
+
+def classify_document_type(text: str, filename: str) -> str:
+    """Classify document category as 'invoice', 'purchase_order', or 'payment'."""
+    lower_text = text.casefold()
+    lower_fname = filename.casefold()
+
+    if (
+        "purchase order" in lower_text
+        or "purchase order" in lower_fname
+        or "po-" in lower_fname
+        or "order date" in lower_text
+        or "delivery date" in lower_text
+        or "po number" in lower_text
+        or "p.o." in lower_text
+    ):
+        return "purchase_order"
+
+    if (
+        "remittance advice" in lower_text
+        or "payment receipt" in lower_text
+        or "payment confirmation" in lower_text
+        or "payment voucher" in lower_text
+        or "payment" in lower_fname
+        or "txn-" in lower_fname
+        or "pay-" in lower_fname
+        or "payment method" in lower_text
+        or "amount paid" in lower_text
+    ):
+        return "payment"
+
+    return "invoice"
+
+
+def process_and_save_document(
+    db: Any,
+    filename: str,
+    content: bytes,
+    document_type: str | None = None,
+    user_id: str | None = None,
+    actor: str = "system",
+) -> tuple[Any, dict[str, Any]]:
+    """Extract fields from document bytes, save UploadedDocument, and create corresponding entity."""
+    from app.models import Invoice, Payment, PurchaseOrder, UploadedDocument, Vendor
+    from app.services.audit import write_audit
+    from app.services.importer import compute_dedupe_hash, normalize_vendor_name
+    from sqlalchemy import select
+
+    extraction = extract_fields(filename, content)
+    doc_type = (document_type or classify_document_type(extraction.raw_text, filename)).casefold()
+    if doc_type not in {"invoice", "purchase_order", "payment"}:
+        doc_type = "invoice"
+
+    fields = dict(extraction.fields)
+    vendor_name = fields.get("vendor_name") or "Extracted Vendor"
+    normalized_v = normalize_vendor_name(vendor_name) or "extractedvendor"
+
+    # Resolve or create vendor
+    vendor = db.scalar(select(Vendor).where(Vendor.normalized_name == normalized_v))
+    if vendor is None:
+        vendor = Vendor(name=vendor_name, normalized_name=normalized_v)
+        db.add(vendor)
+        db.flush()
+
+    # Create UploadedDocument
+    doc = UploadedDocument(
+        user_id=user_id,
+        filename=filename,
+        document_type=doc_type,
+        file_size=len(content),
+        extraction_method=extraction.method,
+        confidence=Decimal(str(extraction.confidence)),
+        extracted_data=fields,
+        raw_text=extraction.raw_text[:2000] if extraction.raw_text else None,
+        status="processed",
+    )
+    db.add(doc)
+    db.flush()
+
+    raw_row_data = {**fields, "source_file": filename, "uploaded_document_id": doc.id}
+
+    if doc_type == "invoice":
+        inv_num = fields.get("invoice_number") or f"INV-{doc.id[:8].upper()}"
+        inv_amt = Decimal(fields.get("invoice_amount") or fields.get("total_amount") or "100.00")
+        currency = fields.get("currency") or "USD"
+        inv_date = _try_parse_date(fields.get("invoice_date") or "") or date.today()
+        due_d = _try_parse_date(fields.get("due_date") or "")
+
+        dedupe_hash = compute_dedupe_hash(vendor.name, inv_num, inv_amt, inv_date)
+        existing = db.scalar(select(Invoice).where(Invoice.dedupe_hash == dedupe_hash))
+        if existing is None:
+            entity = Invoice(
+                user_id=user_id,
+                vendor_id=vendor.id,
+                invoice_number=inv_num,
+                po_number=fields.get("po_number"),
+                amount=inv_amt,
+                currency=currency,
+                invoice_date=inv_date,
+                due_date=due_d,
+                source_file=filename,
+                raw_row=raw_row_data,
+                dedupe_hash=dedupe_hash,
+            )
+            db.add(entity)
+            db.flush()
+        else:
+            entity = existing
+
+    elif doc_type == "purchase_order":
+        po_num = fields.get("po_number") or f"PO-{doc.id[:8].upper()}"
+        po_amt = Decimal(fields.get("total_amount") or fields.get("invoice_amount") or "100.00")
+        currency = fields.get("currency") or "USD"
+        ord_date = _try_parse_date(fields.get("order_date") or fields.get("invoice_date") or "") or date.today()
+
+        existing_po = db.scalar(
+            select(PurchaseOrder).where(
+                PurchaseOrder.vendor_id == vendor.id, PurchaseOrder.po_number == po_num
+            )
+        )
+        if existing_po is None:
+            entity = PurchaseOrder(
+                user_id=user_id,
+                vendor_id=vendor.id,
+                po_number=po_num,
+                amount=po_amt,
+                currency=currency,
+                order_date=ord_date,
+                source_file=filename,
+                raw_row=raw_row_data,
+            )
+            db.add(entity)
+            db.flush()
+        else:
+            entity = existing_po
+
+    else:  # payment
+        ref = fields.get("reference") or f"PAY-{doc.id[:8].upper()}"
+        pay_amt = Decimal(fields.get("payment_amount") or fields.get("total_amount") or "100.00")
+        currency = fields.get("currency") or "USD"
+        pay_date = _try_parse_date(fields.get("payment_date") or fields.get("invoice_date") or "") or date.today()
+
+        existing_pay = db.scalar(
+            select(Payment).where(
+                Payment.vendor_id == vendor.id, Payment.reference == ref
+            )
+        )
+        if existing_pay is None:
+            entity = Payment(
+                user_id=user_id,
+                vendor_id=vendor.id,
+                reference=ref,
+                amount=pay_amt,
+                currency=currency,
+                payment_date=pay_date,
+                source_file=filename,
+                raw_row=raw_row_data,
+            )
+            db.add(entity)
+            db.flush()
+        else:
+            entity = existing_pay
+
+    write_audit(
+        db,
+        actor=actor,
+        action="document_extracted_and_persisted",
+        entity_type="UploadedDocument",
+        entity_id=doc.id,
+        inputs={"filename": filename, "document_type": doc_type, "confidence": float(extraction.confidence)},
+        formula="Regex document extraction and entity persistence",
+        output={"document_id": doc.id, "fields": fields},
+    )
+    db.commit()
+
+    return doc, {
+        "document_id": doc.id,
+        "filename": doc.filename,
+        "document_type": doc.document_type,
+        "confidence": float(doc.confidence),
+        "fields": doc.extracted_data,
+        "warnings": extraction.warnings,
+        "status": doc.status,
+    }

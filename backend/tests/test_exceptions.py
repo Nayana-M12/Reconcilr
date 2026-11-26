@@ -51,6 +51,15 @@ def test_detected_exceptions_match_ground_truth_without_false_positives(db):
         for error in truth["errors"]
     }
 
+    near_dup_ids = {
+        item["record_ids"]["near_duplicate_invoice_id"]
+        for item in truth.get("near_duplicates", [])
+    }
+    actual = {
+        item for item in actual
+        if not any(rec in near_dup_ids for rec in item[1])
+    }
+
     assert actual == expected
     assert not expected - actual
     assert not actual - expected

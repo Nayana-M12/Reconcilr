@@ -68,7 +68,14 @@ def _required(record_type: str, row: ImportRow) -> str | None:
     return None
 
 
-def import_records(db: Session, record_type: str, filename: str, content: bytes, actor: str | None = None) -> dict[str, Any]:
+def import_records(
+    db: Session,
+    record_type: str,
+    filename: str,
+    content: bytes,
+    actor: str | None = None,
+    user_id: str | None = None,
+) -> dict[str, Any]:
     valid_record_types = {"vendor", "invoice", "purchase_order", "payment"}
     if record_type not in valid_record_types:
         raise ValueError("record_type must be vendor, purchase_order, invoice, or payment")
@@ -96,7 +103,7 @@ def import_records(db: Session, record_type: str, filename: str, content: bytes,
                     if existing:
                         raise DuplicateRow(existing.id)
                     vendor = _resolve_vendor(db, row)
-                    entity = _create_record(db, record_type, row, raw, filename, vendor)
+                    entity = _create_record(db, record_type, row, raw, filename, vendor, user_id=user_id)
                 db.flush()
                 imported_ids.append(entity.id)
                 write_audit(
@@ -206,12 +213,13 @@ def _resolve_or_create_vendor(db: Session, row: VendorImportRow) -> Vendor:
 
 
 def _create_record(
-    db: Session, record_type: str, row: ImportRow, raw: dict[str, Any], filename: str, vendor: Vendor
+    db: Session, record_type: str, row: ImportRow, raw: dict[str, Any], filename: str, vendor: Vendor, user_id: str | None = None
 ) -> Invoice | PurchaseOrder | Payment:
     if record_type == "invoice":
         assert row.invoice_number and row.invoice_date
         record = Invoice(
             id=row.id,
+            user_id=user_id,
             vendor_id=vendor.id,
             invoice_number=row.invoice_number,
             po_number=row.po_number,
@@ -227,22 +235,26 @@ def _create_record(
         assert row.po_number and row.order_date
         record = PurchaseOrder(
             id=row.id,
+            user_id=user_id,
             vendor_id=vendor.id,
             po_number=row.po_number,
             amount=row.amount,
             currency=row.currency,
             order_date=row.order_date,
+            source_file=filename,
             raw_row=raw,
         )
     else:
         assert row.reference and row.payment_date
         record = Payment(
             id=row.id,
+            user_id=user_id,
             vendor_id=vendor.id,
             reference=row.reference,
             amount=row.amount,
             currency=row.currency,
             payment_date=row.payment_date,
+            source_file=filename,
             raw_row=raw,
         )
     db.add(record)

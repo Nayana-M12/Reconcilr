@@ -51,6 +51,72 @@ export type AgentRun = {
   claims: Record<string, unknown>[]; tool_calls: Record<string, unknown>[];
   source: string; verification_status: string; errors: string[]; status: string; created_at: string;
 };
+export type DocumentCategoryRecord = {
+  id: string;
+  document_id?: string | null;
+  invoice_number?: string | null;
+  po_number?: string | null;
+  payment_reference?: string | null;
+  invoice_reference?: string | null;
+  vendor_name: string;
+  invoice_date?: string | null;
+  due_date?: string | null;
+  order_date?: string | null;
+  delivery_date?: string | null;
+  payment_date?: string | null;
+  total_amount?: string | null;
+  payment_amount?: string | null;
+  amount?: string | number | null;
+  tax_amount?: string | null;
+  payment_status?: string | null;
+  status?: string | null;
+  payment_method?: string | null;
+  item_description?: string | null;
+  description?: string | null;
+  quantity?: string | null;
+  unit_price?: string | null;
+  currency: string;
+  source_file: string;
+  user_id?: string | null;
+};
+
+export type CategoryResponse = {
+  category: string;
+  files: string[];
+  source_files: string[];
+  total_records: number;
+  total_count: number;
+  records: DocumentCategoryRecord[];
+  stats: Record<string, any>;
+};
+
+export type AISuggestionItem = {
+  id: string;
+  kind: string;
+  action?: string;
+  is_actionable?: boolean;
+  record_ids: string[];
+  score: number;
+  reason: string;
+  source: string;
+  status: string;
+  created_at?: string | null;
+  user_id?: string | null;
+  invoice_number?: string;
+  po_number?: string;
+  vendor_name?: string;
+  amount?: string;
+  invoice_amount?: string;
+  po_amount?: string;
+  difference?: string;
+  days_overdue?: number;
+  due_date?: string;
+  reference?: string;
+  left_name?: string;
+  right_name?: string;
+  [key: string]: any;
+};
+
 export type AuthUser = { username: string; role: string };
 type LoginResponse = { access_token: string; token_type: string; role: string };
 
@@ -125,6 +191,58 @@ export const login = async (username: string, password: string) => {
   setAuthToken(result.access_token);
   return getAuthUser();
 };
+
+export const register = async (username: string, password: string, role = "analyst") => {
+  const result = await request<LoginResponse>("/register", {
+    method: "POST",
+    body: JSON.stringify({ username, password, role }),
+  }, { redirectOnUnauthorized: false });
+  setAuthToken(result.access_token);
+  return getAuthUser();
+};
+
+export const logout = async () => {
+  try {
+    await request("/logout", { method: "POST" });
+  } finally {
+    clearAuthToken();
+  }
+};
+
+export const getCategoryDocuments = (category: string, fileFilter?: string) =>
+  request<CategoryResponse>(
+    `/documents/categories/${encodeURIComponent(category)}${
+      fileFilter ? `?file_filter=${encodeURIComponent(fileFilter)}` : ""
+    }`
+  );
+
+export const uploadCategoryDocument = (file: File, category?: string) => {
+  const body = new FormData();
+  body.append("file", file);
+  if (category) body.append("category", category);
+  return request<{ status: string; message: string; document_id?: string; imported_count?: number }>(
+    "/documents/upload",
+    { method: "POST", body }
+  );
+};
+
+export const getSuggestions = (status?: string) =>
+  request<AISuggestionItem[]>(`/ai/suggestions${status ? `?status=${encodeURIComponent(status)}` : ""}`);
+
+export const generateSuggestions = () =>
+  request<AISuggestionItem[]>("/ai/generate", { method: "POST" });
+
+export const acceptSuggestion = (id: string, note?: string) =>
+  request<AISuggestionItem>(`/ai/suggestions/${id}/accept`, {
+    method: "POST",
+    body: JSON.stringify({ note: note ?? null }),
+  });
+
+export const rejectSuggestion = (id: string, note?: string) =>
+  request<AISuggestionItem>(`/ai/suggestions/${id}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ note: note ?? null }),
+  });
 
 export const getSummary = () => request<Summary>("/summary");
 export const getHealth = () => request<{ status: string }>("/health");

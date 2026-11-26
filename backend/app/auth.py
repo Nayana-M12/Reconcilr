@@ -31,6 +31,8 @@ class AuthenticatedUser:
 def _secret() -> str:
     secret = get_settings().jwt_secret
     if not secret:
+        if get_settings().app_env.casefold() == "development":
+            return "reconcilr-dev-fallback-secret-key-32-chars-ok"
         raise HTTPException(status_code=503, detail="JWT_SECRET is not configured")
     return secret
 

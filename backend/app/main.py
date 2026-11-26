@@ -9,6 +9,7 @@ from app.api.agent import router as agent_router
 from app.api.ai import router as ai_router
 from app.api.audit import router as audit_router
 from app.api.auth import router as auth_router
+from app.api.documents import router as documents_router
 from app.api.exceptions import router as exceptions_router
 from app.api.extract import router as extract_router
 from app.api.imports import router as imports_router
@@ -48,7 +49,7 @@ def _security_headers(response):
 
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
-    public_paths = {"/login", "/health"}
+    public_paths = {"/login", "/register", "/health"}
     if os.getenv("APP_ENV", "production").casefold() == "development":
         public_paths.update({"/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json"})
     token = None
@@ -77,6 +78,7 @@ app.include_router(auth_router)
 protected_dependencies = [Depends(get_current_user)]
 app.include_router(imports_router, dependencies=protected_dependencies)
 app.include_router(extract_router, dependencies=protected_dependencies)
+app.include_router(documents_router, dependencies=protected_dependencies)
 app.include_router(matching_router, dependencies=protected_dependencies)
 app.include_router(exceptions_router, dependencies=protected_dependencies)
 app.include_router(adjustments_router, dependencies=protected_dependencies)

@@ -29,7 +29,7 @@ async def import_file(
         limit_mb = get_settings().upload_max_bytes / (1024 * 1024)
         raise HTTPException(status_code=413, detail=f"Uploaded file exceeds the {limit_mb:g} MB limit")
     try:
-        result = import_records(db, record_type, filename, content)
+        result = import_records(db, record_type, filename, content, actor=user.username, user_id=user.id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return ImportResponse(**result)

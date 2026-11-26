@@ -33,3 +33,58 @@ def test_matching_expected_set_does_not_derive_from_matcher_output(db):
     assert metrics["actual_count"] == 1
     assert metrics["precision"] == 0
     assert metrics["recall"] == 0
+
+
+def test_evaluation_report_endpoint_requires_auth_and_returns_metrics(monkeypatch):
+    from fastapi.testclient import TestClient
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from app.auth.security import hash_password
+    from app.config import get_settings
+    from app.database import Base, get_db
+    from app.main import create_app
+    from app.models import User
+
+    monkeypatch.setenv("JWT_SECRET", "test-only-eval-endpoint-secret-32b")
+    monkeypatch.setenv("APP_ENV", "production")
+    get_settings.cache_clear()
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    app = create_app()
+
+    def override_get_db():
+        db = session_factory()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    with session_factory() as db:
+        db.add(User(username="eval_auditor", password_hash=hash_password("EvalAuditorPass123!"), role="auditor"))
+        db.commit()
+
+    client = TestClient(app)
+    assert client.get("/evaluation/report").status_code == 401
+
+    token = client.post(
+        "/auth/login",
+        json={"username": "eval_auditor", "password": "EvalAuditorPass123!"},
+    ).json()["access_token"]
+    res = client.get("/evaluation/report", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["matching"]["precision"] == 1.0
+    assert body["hallucination_rate"] == 0.0
+    assert body["extraction_accuracy"] == 1.0
+    assert "total_amount" in body["extraction_by_field"]
+    app.dependency_overrides.clear()
+    get_settings.cache_clear()

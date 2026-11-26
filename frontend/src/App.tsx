@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import {
   BrowserRouter,
   Link,
@@ -9,15 +9,19 @@ import {
   Routes,
   useLocation,
   useNavigate,
+  useSearchParams,
 } from "react-router-dom";
 import {
+  acceptAgentRun,
   Adjustment,
+  AgentRun,
   AuditEntry,
   AuthUser,
   clearAuthSession,
   decideAdjustment,
   Exception,
   getAdjustments,
+  getAgentRuns,
   getAudit,
   getAuthToken,
   getAuthUser,
@@ -25,20 +29,23 @@ import {
   getExceptions,
   getMatches,
   getSummary,
+  investigateAgent,
   login,
   onUnauthorized,
+  overrideAgentRun,
   proposeAdjustments,
   runExceptions,
   runMatching,
   Summary,
 } from "./api";
 import LandingCta from "./components/LandingCta";
+import AgentPage, { parseAgentExplanation } from "./pages/AgentPage";
+import EvaluationPage from "./pages/EvaluationPage";
+import ImportPage from "./pages/ImportPage";
 import "./styles.css";
 
 const errorText = (error: unknown) =>
   error instanceof Error ? error.message : "Something went wrong.";
-
-const navIcons = ["⌂", "◇", "＋", "≡"];
 
 const useCountUp = (value: number) => {
   const [displayValue, setDisplayValue] = useState(0);
@@ -192,11 +199,14 @@ function RequireAuth() {
 function Layout() {
   const navigate = useNavigate();
   const user: AuthUser | null = getAuthUser();
-  const links = [
-    ["/app", "Overview"],
-    ["/app/exceptions", "Exceptions"],
-    ["/app/adjustments", "Adjustments"],
-    ["/app/audit", "Audit log"],
+  const links: [string, string, string][] = [
+    ["/app", "Overview", "⌂"],
+    ["/app/import", "Import", "↑"],
+    ["/app/exceptions", "Exceptions", "◇"],
+    ["/app/adjustments", "Adjustments", "＋"],
+    ["/app/agent", "Agent runs", "✦"],
+    ["/app/evaluation", "Evaluation", "◎"],
+    ["/app/audit", "Audit log", "≡"],
   ];
 
   const handleSignOut = () => {
@@ -212,7 +222,7 @@ function Layout() {
             Reconcilr<span className="text-white/40">.</span>
           </Link>
           <nav className="app-nav mt-8 flex gap-2 overflow-auto md:block md:space-y-1">
-            {links.map(([to, label], index) => (
+            {links.map(([to, label, icon]) => (
               <NavLink
                 key={to}
                 to={to}
@@ -224,7 +234,7 @@ function Layout() {
                 }
               >
                 <span className="nav-icon" aria-hidden="true">
-                  {navIcons[index]}
+                  {icon}
                 </span>
                 {label}
               </NavLink>
@@ -276,17 +286,30 @@ function Dashboard() {
   const [activity, setActivity] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    Promise.all([getSummary(), getMatches(), getExceptions({}), getAudit("", 5)])
-      .then(([nextSummary, nextMatches, nextExceptions, nextActivity]) => {
-        setSummary(nextSummary);
-        setMatches(nextMatches);
-        setExceptions(nextExceptions.slice(-5).reverse());
-        setActivity(nextActivity.slice(0, 5));
-      })
-      .catch((e) => setError(errorText(e)))
-      .finally(() => setLoading(false));
+  const refreshAll = useCallback(async (showSpinner = false) => {
+    if (showSpinner) setLoading(true);
+    try {
+      const [nextSummary, nextMatches, nextExceptions, nextActivity] = await Promise.all([
+        getSummary(),
+        getMatches(),
+        getExceptions({}),
+        getAudit("", 5),
+      ]);
+      setSummary(nextSummary);
+      setMatches(nextMatches);
+      setExceptions(nextExceptions.slice(-5).reverse());
+      setActivity(nextActivity.slice(0, 5));
+      setError("");
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    refreshAll(true);
+  }, [refreshAll]);
 
   const run = async (name: string, action: () => Promise<Record<string, unknown> | Adjustment[]>) => {
     setRunning(name);
@@ -295,7 +318,7 @@ function Dashboard() {
     try {
       const value = await action();
       setResult(Array.isArray(value) ? { created: value.length } : value);
-      setSummary(await getSummary());
+      await refreshAll(false);
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -321,10 +344,6 @@ function Dashboard() {
     ["exceptions", "Detect exceptions", "Detect exceptions", runExceptions],
     ["adjustments", "Propose adjustments", "Propose adjustments", proposeAdjustments],
   ];
-  const exceptionAmount = (item: Exception) => {
-    const withAmount = item as Exception & { amount?: string | number };
-    return withAmount.amount == null ? "—" : String(withAmount.amount);
-  };
 
   return (
     <>
@@ -337,6 +356,13 @@ function Dashboard() {
         <div className="dashboard-hero-stat">
           <strong>{matchCount} matches reconciled</strong>
           <span>{openCount} open exceptions</span>
+          <button
+            className="button-secondary mt-3 px-3 py-1 text-xs"
+            disabled={loading || !!running}
+            onClick={() => refreshAll(true)}
+          >
+            Refresh live data
+          </button>
         </div>
       </div>
       <State loading={loading} error={error} />
@@ -399,7 +425,9 @@ function Dashboard() {
           <div className="pipeline-step">
             <span className="pipeline-number">01</span>
             <strong>Import</strong>
-            <small>Source records</small>
+            <Link to="/app/import" className="text-xs text-coral underline">
+              Upload files ↗
+            </Link>
           </div>
           <span className="pipeline-arrow">→</span>
           {pipelineActions.map(([key, title, label, action]) => (
@@ -421,7 +449,9 @@ function Dashboard() {
           <div className="pipeline-step">
             <span className="pipeline-number">05</span>
             <strong>Route approval</strong>
-            <small>Review queue</small>
+            <Link to="/app/adjustments" className="text-xs text-coral underline">
+              Review queue ↗
+            </Link>
           </div>
         </div>
         {result && (
@@ -455,8 +485,10 @@ function Dashboard() {
                   <span className="status-badge" data-status={item.status}>
                     {item.status}
                   </span>
-                  <span className="recent-amount">{exceptionAmount(item)}</span>
-                  <Link to="/app/exceptions">Detail ↗</Link>
+                  <span className="status-badge" data-status={item.severity}>
+                    {item.severity}
+                  </span>
+                  <Link to={`/app/exceptions?id=${encodeURIComponent(item.id)}`}>Detail ↗</Link>
                 </div>
               ))}
             </div>
@@ -494,20 +526,82 @@ function Dashboard() {
 }
 
 function ExceptionsPage() {
+  const user = getAuthUser();
+  const canUseAgent = user?.role !== "auditor";
+  const [searchParams, setSearchParams] = useSearchParams();
   const [items, setItems] = useState<Exception[]>([]);
   const [selected, setSelected] = useState<Exception | null>(null);
+  const [agentRun, setAgentRun] = useState<AgentRun | null>(null);
+  const [highlightedRecordId, setHighlightedRecordId] = useState<string>("");
+  const [agentLoading, setAgentLoading] = useState(false);
+  const [agentSaving, setAgentSaving] = useState(false);
+  const [agentNote, setAgentNote] = useState("");
+  const [agentError, setAgentError] = useState("");
   const [filters, setFilters] = useState({ type: "", status: "", severity: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const load = () => {
+  const loadSelected = useCallback(async (id: string) => {
+    setError("");
+    setAgentError("");
+    setHighlightedRecordId("");
+    try {
+      const [detail, runs] = await Promise.all([getException(id), getAgentRuns()]);
+      setSelected(detail);
+      setAgentRun(runs.find((r) => r.exception_id === id) || null);
+    } catch (e) {
+      setError(errorText(e));
+    }
+  }, []);
+
+  useEffect(() => {
     setLoading(true);
     getExceptions(Object.fromEntries(Object.entries(filters).filter(([, value]) => value)))
       .then(setItems)
       .catch((e) => setError(errorText(e)))
       .finally(() => setLoading(false));
+  }, [filters.type, filters.status, filters.severity]);
+
+  const queryId = searchParams.get("id");
+  useEffect(() => {
+    if (queryId && (!selected || selected.id !== queryId)) {
+      loadSelected(queryId);
+    }
+  }, [queryId, selected, loadSelected]);
+
+  const handleInvestigate = async () => {
+    if (!selected || !canUseAgent) return;
+    setAgentLoading(true);
+    setAgentError("");
+    try {
+      const runs = await investigateAgent(selected.id);
+      if (runs.length > 0) setAgentRun(runs[0]);
+    } catch (e) {
+      setAgentError(errorText(e));
+    } finally {
+      setAgentLoading(false);
+    }
   };
-  useEffect(load, [filters.type, filters.status, filters.severity]);
+
+  const handleAgentDecision = async (action: "accept" | "override") => {
+    if (!agentRun || !canUseAgent) return;
+    setAgentSaving(true);
+    setAgentError("");
+    try {
+      const updated =
+        action === "accept"
+          ? await acceptAgentRun(agentRun.id, agentNote)
+          : await overrideAgentRun(agentRun.id, agentNote);
+      setAgentRun(updated);
+      setAgentNote("");
+    } catch (e) {
+      setAgentError(errorText(e));
+    } finally {
+      setAgentSaving(false);
+    }
+  };
+
+  const parsedAgent = agentRun ? parseAgentExplanation(agentRun.explanation) : null;
 
   return (
     <>
@@ -539,11 +633,10 @@ function ExceptionsPage() {
               {items.map((item) => (
                 <tr
                   key={item.id}
-                  onClick={() =>
-                    getException(item.id)
-                      .then(setSelected)
-                      .catch((e) => setError(errorText(e)))
-                  }
+                  onClick={() => {
+                    setSearchParams({ id: item.id });
+                    loadSelected(item.id);
+                  }}
                   className="cursor-pointer border-b border-white/5 last:border-0 hover:bg-white/5"
                 >
                   <td className="p-4 font-medium">{item.type}</td>
@@ -566,21 +659,47 @@ function ExceptionsPage() {
       )}
       {selected && (
         <div className="detail-panel card mt-5 p-6">
-          <div className="flex items-start justify-between">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs uppercase text-white/40">Exception detail</p>
               <h2 className="mt-1 font-semibold">{selected.type}</h2>
               <p className="mt-2 text-sm text-white/60">{selected.description}</p>
             </div>
-            <button className="text-white/50" onClick={() => setSelected(null)}>
-              Close
-            </button>
+            <div className="flex items-center gap-3">
+              {canUseAgent && (
+                <button
+                  className="button-primary"
+                  disabled={agentLoading}
+                  onClick={handleInvestigate}
+                >
+                  {agentLoading ? "Investigating..." : "Investigate with agent"}
+                </button>
+              )}
+              <button
+                className="text-white/50"
+                onClick={() => {
+                  setSelected(null);
+                  setAgentRun(null);
+                  setSearchParams({});
+                }}
+              >
+                Close
+              </button>
+            </div>
           </div>
+
           <h3 className="mt-6 text-sm font-medium">Evidence</h3>
           <div className="mt-3 space-y-2">
             {selected.evidence.length ? (
               selected.evidence.map((e) => (
-                <div className="rounded-lg border border-white/10 p-3 text-sm" key={e.id}>
+                <div
+                  className={`rounded-lg border p-3 text-sm ${
+                    highlightedRecordId === e.record_id
+                      ? "evidence-highlight"
+                      : "border-white/10"
+                  }`}
+                  key={e.id}
+                >
                   <span className="text-white/50">
                     {e.record_type} · {e.record_id}
                   </span>
@@ -589,6 +708,99 @@ function ExceptionsPage() {
               ))
             ) : (
               <p className="text-sm text-white/50">No evidence attached.</p>
+            )}
+          </div>
+
+          <div className="mt-6 border-t border-white/10 pt-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-medium">Grounded AI investigation</h3>
+              <Link to="/app/agent" className="text-xs text-coral underline">
+                All agent runs ↗
+              </Link>
+            </div>
+            {agentError && <div className="auth-alert mt-3">{agentError}</div>}
+            {!agentRun ? (
+              <p className="mt-2 text-sm text-white/45">
+                {canUseAgent
+                  ? 'Click "Investigate with agent" to run a verified investigation citing only real record IDs.'
+                  : "No agent investigation recorded for this exception yet."}
+              </p>
+            ) : (
+              <div className="mt-3 space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  <span className="status-badge" data-status={agentRun.verdict}>
+                    verdict: {agentRun.verdict}
+                  </span>
+                  <span className="status-badge">source: {agentRun.source}</span>
+                  <span className="status-badge" data-status={agentRun.verification_status}>
+                    {agentRun.verification_status}
+                  </span>
+                  <span className="status-badge" data-status={agentRun.status}>
+                    {agentRun.status}
+                  </span>
+                </div>
+
+                {parsedAgent?.proposed_action && (
+                  <div className="rounded-lg border border-white/10 p-3 text-sm">
+                    <span className="text-xs uppercase text-white/45">Proposed action</span>
+                    <p className="mt-1 font-medium">{parsedAgent.proposed_action}</p>
+                    {parsedAgent.draft_note && (
+                      <p className="mt-1 text-xs text-white/65">{parsedAgent.draft_note}</p>
+                    )}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  {agentRun.claims.map((claim, idx) => (
+                    <div key={idx} className="rounded-lg border border-white/10 p-3 text-sm">
+                      <p className="text-white/85">{claim.text}</p>
+                      {claim.record_ids.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {claim.record_ids.map((rid) => (
+                            <button
+                              type="button"
+                              key={rid}
+                              className="record-chip"
+                              onClick={() => setHighlightedRecordId(rid)}
+                              title="Highlight matching evidence record"
+                            >
+                              {rid}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {canUseAgent && (
+                  <div className="space-y-2">
+                    <input
+                      className="field w-full"
+                      placeholder="Decision note (optional)"
+                      value={agentNote}
+                      disabled={agentSaving}
+                      onChange={(e) => setAgentNote(e.target.value)}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        className="button-primary flex-1"
+                        disabled={agentSaving}
+                        onClick={() => handleAgentDecision("accept")}
+                      >
+                        Accept recommendation
+                      </button>
+                      <button
+                        className="button-secondary flex-1"
+                        disabled={agentSaving}
+                        onClick={() => handleAgentDecision("override")}
+                      >
+                        Override
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -817,8 +1029,11 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/app" element={<RequireAuth />}>
           <Route index element={<Dashboard />} />
+          <Route path="import" element={<ImportPage />} />
           <Route path="exceptions" element={<ExceptionsPage />} />
           <Route path="adjustments" element={<AdjustmentsPage />} />
+          <Route path="agent" element={<AgentPage />} />
+          <Route path="evaluation" element={<EvaluationPage />} />
           <Route path="audit" element={<AuditPage />} />
         </Route>
       </Routes>

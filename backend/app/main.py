@@ -13,6 +13,7 @@ from app.api.ai import router as ai_router
 from app.api.audit import router as audit_router
 from app.api.auth import router as auth_router
 from app.api.document_import import router as document_import_router
+from app.api.evaluation import router as evaluation_router
 from app.api.exceptions import router as exceptions_router
 from app.api.imports import router as imports_router
 from app.api.matching import router as matching_router
@@ -80,6 +81,7 @@ def create_app() -> FastAPI:
     application.include_router(ai_router)
     application.include_router(agent_router)
     application.include_router(audit_router)
+    application.include_router(evaluation_router)
     application.include_router(summary_router)
 
     @application.on_event("startup")

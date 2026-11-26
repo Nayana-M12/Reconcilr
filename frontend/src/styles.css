@@ -634,3 +634,32 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .auth-footer-links a:hover {
   color: var(--coral-start);
 }
+
+.text-coral {
+  color: var(--coral-start);
+}
+
+.record-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(244, 118, 104, 0.45);
+  background: rgba(244, 118, 104, 0.12);
+  color: var(--coral-start);
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.record-chip:hover {
+  border-color: rgba(255, 138, 115, 0.85);
+  background: rgba(244, 118, 104, 0.22);
+}
+
+.evidence-highlight {
+  border-color: rgba(255, 138, 115, 0.8) !important;
+  background: rgba(244, 118, 104, 0.12);
+}

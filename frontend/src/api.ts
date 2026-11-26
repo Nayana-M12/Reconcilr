@@ -75,6 +75,115 @@ export type ImportResponse = {
   ids: string[];
 };
 
+export type ImportPreviewResponse = {
+  filename: string;
+  record_type: string;
+  columns: string[];
+  total_rows: number;
+  preview_rows: Record<string, string>[];
+  required_fields: string[];
+  optional_fields: string[];
+  suggested_mapping: Record<string, string>;
+  missing_required_fields: string[];
+};
+
+export type MappedImportResponse = {
+  record_type: string;
+  source_file: string;
+  imported: number;
+  duplicates: number;
+  rejected: number;
+  rejected_rows: { row: number; reason: string }[];
+  ids: string[];
+};
+
+export type FieldProvenance = {
+  value: string;
+  page: number;
+  snippet: string;
+  confidence: number;
+};
+
+export type DocumentImportResponse = {
+  imported: {
+    filename: string;
+    record_type: string;
+    record_id: string;
+    fields_found: Record<string, string>;
+    provenance: Record<string, FieldProvenance>;
+  }[];
+  duplicates: {
+    filename: string;
+    document_type: string;
+    fields_found: Record<string, string>;
+    provenance: Record<string, FieldProvenance>;
+    detail: string;
+  }[];
+  needs_review: {
+    filename: string;
+    document_type: string | null;
+    fields_found: Record<string, string>;
+    fields_missing: string[];
+    provenance: Record<string, FieldProvenance>;
+    errors?: Record<string, unknown>[];
+  }[];
+  unsupported: {
+    filename: string;
+    code: string;
+    message: string;
+  }[];
+};
+
+export type AgentClaim = {
+  text: string;
+  record_ids: string[];
+  tool_call_refs: string[];
+};
+
+export type AgentRun = {
+  id: string;
+  exception_id: string;
+  verdict: string;
+  explanation: string;
+  claims: AgentClaim[];
+  tool_calls: { ref?: string; name?: string; arguments?: Record<string, unknown>; result?: unknown }[];
+  source: string;
+  verification_status: string;
+  errors: string[];
+  status: string;
+  created_at: string;
+};
+
+export type EvaluationReport = {
+  matching: {
+    precision: number;
+    recall: number;
+    expected_count: number;
+    actual_count: number;
+    false_positives: Record<string, unknown>[];
+    false_negatives: Record<string, unknown>[];
+  };
+  duplicates: {
+    detection_rate: number;
+    false_positives: number;
+  };
+  exceptions: {
+    by_type: Record<
+      string,
+      { expected: number; detected: number; precision: number; recall: number }
+    >;
+  };
+  similarity: Record<
+    string,
+    { precision: number; recall: number; expected_count: number; actual_count: number }
+  >;
+  hallucination_rate: number;
+  unresolved_correctness: number;
+  extraction_accuracy: number | null;
+  extraction_by_field?: Record<string, { correct: number; total: number; accuracy: number }>;
+  extraction_status: string;
+};
+
 export class ApiError extends Error {
   status: number;
   detail: string;
@@ -165,6 +274,7 @@ export async function request<T>(
   let response: Response;
   try {
     response = await fetch(`${BASE_URL}${path}`, {
+      cache: "no-store",
       ...init,
       headers: mergedHeaders,
     });
@@ -256,3 +366,52 @@ export const getAudit = (entityType = "", limit = 100) =>
       limit: String(limit),
     })}`,
   );
+
+export const previewImport = (file: File, recordType: string) => {
+  const body = new FormData();
+  body.append("file", file);
+  body.append("record_type", recordType);
+  return request<ImportPreviewResponse>("/import/preview", { method: "POST", body });
+};
+
+export const importMapped = (
+  file: File,
+  recordType: string,
+  mapping: Record<string, string>,
+  dateFormat: string,
+) => {
+  const body = new FormData();
+  body.append("file", file);
+  body.append("record_type", recordType);
+  body.append("mapping", JSON.stringify(mapping));
+  body.append("date_format", dateFormat);
+  return request<MappedImportResponse>("/import/mapped", { method: "POST", body });
+};
+
+export const importDocuments = (files: File[]) => {
+  const body = new FormData();
+  files.forEach((file) => body.append("files", file));
+  return request<DocumentImportResponse>("/import/document", { method: "POST", body });
+};
+
+export const investigateAgent = (exceptionId?: string) =>
+  request<AgentRun[]>("/agent/investigate", {
+    method: "POST",
+    body: JSON.stringify(exceptionId ? { exception_id: exceptionId } : {}),
+  });
+
+export const getAgentRuns = () => request<AgentRun[]>("/agent/runs");
+
+export const acceptAgentRun = (runId: string, note = "") =>
+  request<AgentRun>(`/agent/runs/${encodeURIComponent(runId)}/accept`, {
+    method: "POST",
+    body: JSON.stringify({ note: note || null }),
+  });
+
+export const overrideAgentRun = (runId: string, note = "") =>
+  request<AgentRun>(`/agent/runs/${encodeURIComponent(runId)}/override`, {
+    method: "POST",
+    body: JSON.stringify({ note: note || null }),
+  });
+
+export const getEvaluationReport = () => request<EvaluationReport>("/evaluation/report");

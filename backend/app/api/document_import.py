@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import csv
+import json
 from io import StringIO
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
+from app.api.imports import ALLOWED_TABULAR_EXTENSIONS, validate_upload
 from app.auth.security import actor_from_user, require_roles
 from app.config import get_settings
 from app.database import get_db
@@ -19,6 +21,7 @@ from app.extraction import (
 from app.models import User
 from app.services.audit import write_audit
 from app.services.importer import import_records
+from app.services.mapped_importer import import_mapped_file, preview_tabular_file
 
 router = APIRouter(prefix="/import", tags=["import"])
 
@@ -187,3 +190,52 @@ async def import_documents(
         "needs_review": needs_review,
         "unsupported": unsupported,
     }
+
+
+@router.post("/preview")
+async def preview_import(
+    file: UploadFile = File(...),  # noqa: B008
+    record_type: str = Form("invoice"),
+    current_user: User = Depends(require_roles("analyst", "admin")),  # noqa: B008
+) -> dict[str, Any]:
+    _ = current_user
+    filename = file.filename or "upload.csv"
+    content = await file.read()
+    validate_upload(filename, content, ALLOWED_TABULAR_EXTENSIONS)
+    try:
+        return preview_tabular_file(filename, content, record_type=record_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/mapped")
+async def import_mapped(
+    file: UploadFile = File(...),  # noqa: B008
+    record_type: str = Form(...),
+    mapping: str = Form(...),
+    date_format: str = Form("auto"),
+    db: Session = Depends(get_db),  # noqa: B008
+    current_user: User = Depends(require_roles("analyst", "admin")),  # noqa: B008
+) -> dict[str, Any]:
+    filename = file.filename or "upload.csv"
+    content = await file.read()
+    validate_upload(filename, content, ALLOWED_TABULAR_EXTENSIONS)
+    try:
+        parsed_mapping = json.loads(mapping)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="mapping must be valid JSON") from exc
+    if not isinstance(parsed_mapping, dict):
+        raise HTTPException(status_code=400, detail="mapping must be a JSON object")
+    clean_mapping = {str(k): str(v) for k, v in parsed_mapping.items() if v}
+    try:
+        return import_mapped_file(
+            db,
+            filename=filename,
+            content=content,
+            record_type=record_type,
+            mapping=clean_mapping,
+            date_format=date_format,
+            actor=actor_from_user(current_user),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

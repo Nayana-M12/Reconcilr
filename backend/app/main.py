@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.adjustments import router as adjustments_router
+from app.api.admin_users import router as admin_users_router
 from app.api.agent import router as agent_router
 from app.api.ai import router as ai_router
 from app.api.audit import router as audit_router
@@ -73,6 +74,7 @@ def create_app() -> FastAPI:
     )
 
     application.include_router(auth_router)
+    application.include_router(admin_users_router)
     application.include_router(imports_router)
     application.include_router(document_import_router)
     application.include_router(matching_router)

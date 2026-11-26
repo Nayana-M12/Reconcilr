@@ -42,6 +42,8 @@ import LandingCta from "./components/LandingCta";
 import AgentPage, { parseAgentExplanation } from "./pages/AgentPage";
 import EvaluationPage from "./pages/EvaluationPage";
 import ImportPage from "./pages/ImportPage";
+import RequestAccessPage from "./pages/RequestAccessPage";
+import UsersPage from "./pages/UsersPage";
 import "./styles.css";
 
 const errorText = (error: unknown) =>
@@ -173,6 +175,7 @@ function LoginPage() {
         </form>
         <div className="auth-footer-links">
           <Link to="/">← Back to landing</Link>
+          <Link to="/request-access">Request access</Link>
         </div>
       </div>
     </div>
@@ -207,6 +210,7 @@ function Layout() {
     ["/app/agent", "Agent runs", "✦"],
     ["/app/evaluation", "Evaluation", "◎"],
     ["/app/audit", "Audit log", "≡"],
+    ...(user?.role === "admin" ? ([["/app/users", "Users", "◈"]] as [string, string, string][]) : []),
   ];
 
   const handleSignOut = () => {
@@ -1027,6 +1031,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/request-access" element={<RequestAccessPage />} />
         <Route path="/app" element={<RequireAuth />}>
           <Route index element={<Dashboard />} />
           <Route path="import" element={<ImportPage />} />
@@ -1035,6 +1040,7 @@ function App() {
           <Route path="agent" element={<AgentPage />} />
           <Route path="evaluation" element={<EvaluationPage />} />
           <Route path="audit" element={<AuditPage />} />
+          <Route path="users" element={<UsersPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

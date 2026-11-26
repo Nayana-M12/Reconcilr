@@ -415,3 +415,70 @@ export const overrideAgentRun = (runId: string, note = "") =>
   });
 
 export const getEvaluationReport = () => request<EvaluationReport>("/evaluation/report");
+
+export type AdminUserRecord = {
+  id: string;
+  username: string;
+  email: string | null;
+  role: UserRole | null;
+  status: string;
+  is_active: boolean;
+  created_via: string;
+  request_note: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  created_at: string | null;
+};
+
+export const requestAccess = (payload: {
+  username: string;
+  email: string;
+  password: string;
+  note?: string;
+}) =>
+  request<{ message: string }>(
+    "/auth/request-access",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+    { skipAuthRedirect: true },
+  );
+
+export const getAdminUsers = (status = "") =>
+  request<AdminUserRecord[]>(
+    `/admin/users${status ? `?${new URLSearchParams({ status })}` : ""}`,
+  );
+
+export const createAdminUser = (payload: {
+  username: string;
+  email?: string;
+  password: string;
+  role: UserRole;
+}) =>
+  request<AdminUserRecord>("/admin/users", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const approveAdminUser = (userId: string, role: UserRole) =>
+  request<AdminUserRecord>(`/admin/users/${encodeURIComponent(userId)}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ role }),
+  });
+
+export const rejectAdminUser = (userId: string) =>
+  request<AdminUserRecord>(`/admin/users/${encodeURIComponent(userId)}/reject`, {
+    method: "POST",
+  });
+
+export const deactivateAdminUser = (userId: string) =>
+  request<AdminUserRecord>(`/admin/users/${encodeURIComponent(userId)}/deactivate`, {
+    method: "POST",
+  });
+
+export const changeAdminUserRole = (userId: string, role: UserRole) =>
+  request<AdminUserRecord>(`/admin/users/${encodeURIComponent(userId)}/role`, {
+    method: "PATCH",
+    body: JSON.stringify({ role }),
+  });

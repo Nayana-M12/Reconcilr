@@ -110,3 +110,114 @@ def test_accepting_run_twice_returns_conflict(db, monkeypatch):
     with pytest.raises(Exception) as error:
         accept_run(run.id, DecisionRequest(role="analyst"), db)
     assert getattr(error.value, "status_code", None) == 409
+
+
+def test_resolution_plan_covers_all_eight_sections_and_multiple_solutions(db, monkeypatch):
+    _prepare(db)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+
+    for exc_type in (
+        "PARTIAL_PAYMENT",
+        "OVERPAYMENT",
+        "DUPLICATE_INVOICE",
+        "MISSING_PAYMENT",
+        "MISSING_PO",
+        "VENDOR_MISMATCH",
+        "DATE_GAP",
+    ):
+        case = db.scalar(select(ExceptionCase).where(ExceptionCase.type == exc_type))
+        assert case is not None
+        run = investigate_exception(db, case.id)
+        payload = json.loads(run.explanation)
+        plan = payload["resolution_plan"]
+        assert plan["problem_identification"]
+        assert len(plan["possible_causes"]) >= 2
+        assert len(plan["possible_solutions"]) >= 2
+        assert plan["recommended_solution"]
+        assert len(plan["required_actions"]) >= 2
+        assert len(plan["required_documents"]) >= 2
+        assert plan["expected_outcome"]
+        assert plan["confidence_level"] in {"low", "medium", "high"}
+
+        if exc_type == "PARTIAL_PAYMENT":
+            assert "10.00" in plan["problem_identification"]
+            assert len(plan["possible_solutions"]) == 4
+            assert plan["insufficient_evidence"] is False
+        if exc_type == "MISSING_PAYMENT":
+            assert plan["insufficient_evidence"] is True
+            assert plan["recommended_solution_id"] is None
+            assert plan["confidence_level"] == "low"
+
+
+def test_verifier_rejects_hallucinated_id_or_literal_amount_inside_resolution_plan(db):
+    from app.agent.verifier import ResolutionOption, ResolutionPlan
+
+    case = ExceptionCase(type="PARTIAL_PAYMENT", severity="medium", description="short")
+    db.add(case)
+    db.commit()
+    bad_plan = ResolutionPlan(
+        problem_identification="Payment pay-009999 was short by ₹5000.",
+        possible_causes=["Cause A"],
+        possible_solutions=[
+            ResolutionOption(id="s1", title="Opt 1", possible_cause="c1", action="a1", resolution="r1"),
+            ResolutionOption(id="s2", title="Opt 2", possible_cause="c2", action="a2", resolution="r2"),
+        ],
+        recommended_solution_id="s1",
+        recommended_solution="Check bank statement.",
+        required_actions=["Check"],
+        required_documents=["Bank statement"],
+        expected_outcome="No automatic change.",
+        confidence_level="low",
+    )
+    result = InvestigationResult(
+        exception_id=case.id,
+        verdict="unresolved",
+        claims=[],
+        proposed_action="request_info",
+        draft_note="note",
+        resolution_plan=bad_plan,
+    )
+    with pytest.raises(VerificationFailure, match="literal number or amount"):
+        verify_and_render(db, result, [{"ref": "tool_call_1", "result": {"records": []}}], source="llm")
+
+
+def test_analyst_selects_solution_routes_to_pending_approval_and_audits_full_decision(db, monkeypatch):
+    from app.models import Adjustment, AuditLog
+
+    _prepare(db)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+    case = db.scalar(select(ExceptionCase).where(ExceptionCase.type == "PARTIAL_PAYMENT"))
+    run = investigate_exception(db, case.id)
+
+    # Invalid solution ID is rejected with 400
+    with pytest.raises(Exception) as bad_err:
+        accept_run(run.id, DecisionRequest(role="analyst", selected_solution_id="nonexistent"), db)
+    assert getattr(bad_err.value, "status_code", None) == 400
+
+    # Valid solution selection routes to existing pending approval (never auto-applies)
+    accepted = accept_run(
+        run.id,
+        DecisionRequest(
+            role="analyst",
+            selected_solution_id="credit_note_adjustment",
+            note="Checked bank statement; routing credit note adjustment for approver sign-off",
+        ),
+        db,
+    )
+    assert accepted["status"] == "accepted"
+    assert accepted["selected_solution_id"] == "credit_note_adjustment"
+
+    adj = db.scalar(select(Adjustment).where(Adjustment.exception_id == case.id))
+    assert adj is not None
+    assert adj.status == "pending"  # Never auto-applied!
+
+    audit_entry = db.scalar(
+        select(AuditLog).where(AuditLog.action == "agent_accept", AuditLog.entity_id == run.id)
+    )
+    assert audit_entry is not None
+    assert audit_entry.output["selected_solution"]["id"] == "credit_note_adjustment"
+    assert len(audit_entry.output["suggested_solutions"]) == 4
+    assert audit_entry.output["ai_problem_identification"]
+    assert len(audit_entry.inputs["supporting_evidence"]) >= 2

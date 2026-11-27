@@ -709,3 +709,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .auth-switch-link:hover {
   text-decoration: underline;
 }
+
+.solution-card {
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.solution-card:hover {
+  border-color: rgba(244, 118, 104, 0.45);
+  background: rgba(244, 118, 104, 0.06);
+}
+
+.solution-card-selected {
+  border-color: rgba(255, 138, 115, 0.85) !important;
+  background: rgba(244, 118, 104, 0.12);
+}

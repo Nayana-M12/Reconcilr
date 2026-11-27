@@ -140,17 +140,43 @@ export type AgentClaim = {
   tool_call_refs: string[];
 };
 
+export type ResolutionOption = {
+  id: string;
+  title: string;
+  possible_cause: string;
+  action: string;
+  resolution: string;
+  workflow_action: string;
+};
+
+export type ResolutionPlan = {
+  problem_identification: string;
+  possible_causes: string[];
+  possible_solutions: ResolutionOption[];
+  recommended_solution_id: string | null;
+  recommended_solution: string;
+  required_actions: string[];
+  required_documents: string[];
+  expected_outcome: string;
+  confidence_level: "low" | "medium" | "high";
+  confidence_rationale: string;
+  insufficient_evidence: boolean;
+};
+
 export type AgentRun = {
   id: string;
   exception_id: string;
   verdict: string;
   explanation: string;
+  resolution_plan?: ResolutionPlan | null;
   claims: AgentClaim[];
   tool_calls: { ref?: string; name?: string; arguments?: Record<string, unknown>; result?: unknown }[];
   source: string;
   verification_status: string;
   errors: string[];
   status: string;
+  selected_solution_id?: string | null;
+  selected_solution_note?: string | null;
   created_at: string;
 };
 
@@ -419,10 +445,13 @@ export const investigateAgent = (exceptionId?: string) =>
 
 export const getAgentRuns = () => request<AgentRun[]>("/agent/runs");
 
-export const acceptAgentRun = (runId: string, note = "") =>
+export const acceptAgentRun = (runId: string, note = "", selectedSolutionId?: string) =>
   request<AgentRun>(`/agent/runs/${encodeURIComponent(runId)}/accept`, {
     method: "POST",
-    body: JSON.stringify({ note: note || null }),
+    body: JSON.stringify({
+      note: note || null,
+      ...(selectedSolutionId ? { selected_solution_id: selectedSolutionId } : {}),
+    }),
   });
 
 export const overrideAgentRun = (runId: string, note = "") =>

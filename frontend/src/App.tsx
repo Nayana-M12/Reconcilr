@@ -40,6 +40,7 @@ import {
   Summary,
 } from "./api";
 import LandingCta from "./components/LandingCta";
+import ResolutionPlanView from "./components/ResolutionPlanView";
 import AgentPage, { parseAgentExplanation } from "./pages/AgentPage";
 import EvaluationPage from "./pages/EvaluationPage";
 import ImportPage from "./pages/ImportPage";
@@ -614,10 +615,25 @@ function ExceptionsPage() {
   const [agentLoading, setAgentLoading] = useState(false);
   const [agentSaving, setAgentSaving] = useState(false);
   const [agentNote, setAgentNote] = useState("");
+  const [selectedSolutionId, setSelectedSolutionId] = useState("");
   const [agentError, setAgentError] = useState("");
   const [filters, setFilters] = useState({ type: "", status: "", severity: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+
+  const syncSelectedSolution = (run: AgentRun | null) => {
+    if (!run) {
+      setSelectedSolutionId("");
+      return;
+    }
+    const plan = run.resolution_plan || parseAgentExplanation(run.explanation)?.resolution_plan;
+    setSelectedSolutionId(
+      run.selected_solution_id ||
+        plan?.recommended_solution_id ||
+        plan?.possible_solutions?.[0]?.id ||
+        "",
+    );
+  };
 
   const loadSelected = useCallback(async (id: string) => {
     setError("");
@@ -626,7 +642,9 @@ function ExceptionsPage() {
     try {
       const [detail, runs] = await Promise.all([getException(id), getAgentRuns()]);
       setSelected(detail);
-      setAgentRun(runs.find((r) => r.exception_id === id) || null);
+      const latestRun = runs.find((r) => r.exception_id === id) || null;
+      setAgentRun(latestRun);
+      syncSelectedSolution(latestRun);
     } catch (e) {
       setError(errorText(e));
     }
@@ -653,7 +671,10 @@ function ExceptionsPage() {
     setAgentError("");
     try {
       const runs = await investigateAgent(selected.id);
-      if (runs.length > 0) setAgentRun(runs[0]);
+      if (runs.length > 0) {
+        setAgentRun(runs[0]);
+        syncSelectedSolution(runs[0]);
+      }
     } catch (e) {
       setAgentError(errorText(e));
     } finally {
@@ -668,9 +689,10 @@ function ExceptionsPage() {
     try {
       const updated =
         action === "accept"
-          ? await acceptAgentRun(agentRun.id, agentNote)
+          ? await acceptAgentRun(agentRun.id, agentNote, selectedSolutionId || undefined)
           : await overrideAgentRun(agentRun.id, agentNote);
       setAgentRun(updated);
+      syncSelectedSolution(updated);
       setAgentNote("");
     } catch (e) {
       setAgentError(errorText(e));
@@ -680,6 +702,7 @@ function ExceptionsPage() {
   };
 
   const parsedAgent = agentRun ? parseAgentExplanation(agentRun.explanation) : null;
+  const activePlan = agentRun?.resolution_plan || parsedAgent?.resolution_plan || null;
 
   return (
     <>
@@ -851,11 +874,21 @@ function ExceptionsPage() {
                   ))}
                 </div>
 
+                {activePlan && (
+                  <ResolutionPlanView
+                    plan={activePlan}
+                    selectedSolutionId={selectedSolutionId}
+                    onSelectSolution={setSelectedSolutionId}
+                    selectable={canUseAgent && agentRun.status === "pending"}
+                    committedSolutionId={agentRun.selected_solution_id}
+                  />
+                )}
+
                 {canUseAgent && (
                   <div className="space-y-2">
                     <input
                       className="field w-full"
-                      placeholder="Decision note (optional)"
+                      placeholder="Analyst note / supporting document reference (optional)"
                       value={agentNote}
                       disabled={agentSaving}
                       onChange={(e) => setAgentNote(e.target.value)}
@@ -866,7 +899,7 @@ function ExceptionsPage() {
                         disabled={agentSaving}
                         onClick={() => handleAgentDecision("accept")}
                       >
-                        Accept recommendation
+                        Submit selected solution for approval
                       </button>
                       <button
                         className="button-secondary flex-1"

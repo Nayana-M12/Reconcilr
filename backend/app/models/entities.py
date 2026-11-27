@@ -152,6 +152,8 @@ class AgentRun(Base):
     verification_status: Mapped[str] = mapped_column(String(20), nullable=False)
     errors: Mapped[list[str]] = mapped_column(JSON, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    selected_solution_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    selected_solution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
 

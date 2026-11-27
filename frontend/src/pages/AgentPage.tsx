@@ -7,7 +7,9 @@ import {
   getAuthUser,
   investigateAgent,
   overrideAgentRun,
+  ResolutionPlan,
 } from "../api";
+import ResolutionPlanView from "../components/ResolutionPlanView";
 
 const errorText = (error: unknown) =>
   error instanceof Error ? error.message : "Something went wrong.";
@@ -17,6 +19,7 @@ type ParsedExplanation = {
   proposed_action?: string;
   draft_note?: string;
   claims?: { text: string; record_ids: string[]; tool_call_refs: string[] }[];
+  resolution_plan?: ResolutionPlan | null;
 };
 
 export function parseAgentExplanation(raw: string): ParsedExplanation | null {
@@ -32,11 +35,28 @@ export default function AgentPage() {
   const canAct = user?.role !== "auditor";
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [selected, setSelected] = useState<AgentRun | null>(null);
+  const [selectedSolutionId, setSelectedSolutionId] = useState("");
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
+
+  const selectRun = (run: AgentRun | null) => {
+    setSelected(run);
+    setError("");
+    if (!run) {
+      setSelectedSolutionId("");
+      return;
+    }
+    const plan = run.resolution_plan || parseAgentExplanation(run.explanation)?.resolution_plan;
+    setSelectedSolutionId(
+      run.selected_solution_id ||
+        plan?.recommended_solution_id ||
+        plan?.possible_solutions?.[0]?.id ||
+        "",
+    );
+  };
 
   const load = () => {
     setLoading(true);
@@ -46,7 +66,7 @@ export default function AgentPage() {
         setRuns(data);
         if (selected) {
           const fresh = data.find((r) => r.id === selected.id) || null;
-          setSelected(fresh);
+          selectRun(fresh);
         }
       })
       .catch((e) => setError(errorText(e)))
@@ -63,7 +83,7 @@ export default function AgentPage() {
       const created = await investigateAgent();
       const updated = await getAgentRuns();
       setRuns(updated);
-      if (created.length > 0) setSelected(created[0]);
+      if (created.length > 0) selectRun(created[0]);
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -78,9 +98,9 @@ export default function AgentPage() {
     try {
       const updated =
         action === "accept"
-          ? await acceptAgentRun(selected.id, note)
+          ? await acceptAgentRun(selected.id, note, selectedSolutionId || undefined)
           : await overrideAgentRun(selected.id, note);
-      setSelected(updated);
+      selectRun(updated);
       setRuns((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
       setNote("");
     } catch (e) {
@@ -91,6 +111,7 @@ export default function AgentPage() {
   };
 
   const parsed = selected ? parseAgentExplanation(selected.explanation) : null;
+  const activePlan = selected?.resolution_plan || parsed?.resolution_plan || null;
 
   return (
     <>
@@ -98,7 +119,7 @@ export default function AgentPage() {
         <header className="app-page-title">
           <h1 className="text-2xl font-semibold">Agent runs</h1>
           <p className="mt-1 text-sm text-white/45">
-            Grounded AI investigations verified against database records and deterministic calculations.
+            Grounded AI investigations with actionable resolution options verified against database records.
           </p>
         </header>
         {canAct && (
@@ -121,8 +142,8 @@ export default function AgentPage() {
       )}
 
       {!loading && !!runs.length && (
-        <div className="grid gap-5 lg:grid-cols-[1fr_460px]">
-          <div className="card overflow-auto">
+        <div className="grid gap-5 lg:grid-cols-[1fr_540px]">
+          <div className="card h-fit overflow-auto">
             <table className="w-full min-w-[540px] text-left text-sm">
               <thead className="border-b border-white/10 text-xs uppercase text-white/40">
                 <tr>
@@ -137,10 +158,7 @@ export default function AgentPage() {
                 {runs.map((run) => (
                   <tr
                     key={run.id}
-                    onClick={() => {
-                      setSelected(run);
-                      setError("");
-                    }}
+                    onClick={() => selectRun(run)}
                     className="cursor-pointer border-b border-white/5 last:border-0 hover:bg-white/5"
                   >
                     <td className="p-4 font-medium">
@@ -172,7 +190,7 @@ export default function AgentPage() {
             <div className="detail-panel card h-fit p-6">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase text-white/40">Investigation detail</p>
+                  <p className="text-xs uppercase text-white/40">AI Exception Analyst</p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <span className="status-badge" data-status={selected.verdict}>
                       {selected.verdict}
@@ -186,7 +204,7 @@ export default function AgentPage() {
                     <span className="status-badge">{selected.source}</span>
                   </div>
                 </div>
-                <button className="text-white/50" onClick={() => setSelected(null)}>
+                <button className="text-white/50" onClick={() => selectRun(null)}>
                   Close
                 </button>
               </div>
@@ -200,16 +218,6 @@ export default function AgentPage() {
                   {selected.exception_id} ↗
                 </Link>
               </div>
-
-              {parsed?.proposed_action && (
-                <div className="mt-4 rounded-lg border border-white/10 p-3 text-sm">
-                  <span className="text-xs uppercase text-white/45">Proposed action</span>
-                  <p className="mt-1 font-medium">{parsed.proposed_action}</p>
-                  {parsed.draft_note && (
-                    <p className="mt-1 text-xs text-white/65">{parsed.draft_note}</p>
-                  )}
-                </div>
-              )}
 
               <h3 className="mt-5 text-sm font-medium">Verified claims &amp; cited records</h3>
               <div className="mt-2 space-y-2">
@@ -237,6 +245,18 @@ export default function AgentPage() {
                 )}
               </div>
 
+              {activePlan && (
+                <div className="mt-5">
+                  <ResolutionPlanView
+                    plan={activePlan}
+                    selectedSolutionId={selectedSolutionId}
+                    onSelectSolution={setSelectedSolutionId}
+                    selectable={canAct && selected.status === "pending"}
+                    committedSolutionId={selected.selected_solution_id}
+                  />
+                </div>
+              )}
+
               {selected.errors.length > 0 && (
                 <div className="auth-alert mt-4">
                   <strong>Verification fallback notes:</strong>
@@ -252,7 +272,7 @@ export default function AgentPage() {
                 <div className="mt-5 border-t border-white/10 pt-4">
                   <input
                     className="field w-full"
-                    placeholder="Reviewer note (optional)"
+                    placeholder="Analyst note / supporting document reference (optional)"
                     value={note}
                     disabled={saving}
                     onChange={(e) => setNote(e.target.value)}
@@ -263,7 +283,7 @@ export default function AgentPage() {
                       disabled={saving}
                       onClick={() => handleDecision("accept")}
                     >
-                      Accept
+                      Submit selected solution for approval
                     </button>
                     <button
                       className="button-secondary flex-1"
